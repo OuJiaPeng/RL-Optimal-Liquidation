@@ -1,0 +1,50 @@
+# Phase 1 — reproduce Almgren-Chriss in the linear-impact regime.
+#
+# This is the validation config. PPO+Beta+1M should land within [0.8, 4.0]%
+# of AC across seeds. Result is documented in docs/phase1_journal.md.
+#
+# YAML 1.1 quirk: scientific notation needs an explicit sign on the exponent
+# (1.0e+6 not 1.0e6). LiquidationParams.__post_init__ coerces strings to
+# float as a safety net.
+
+env:
+  Q: 1.0e+6          # total shares
+  T: 1.0             # horizon (one trading day, normalized)
+  N: 50              # discrete steps
+  S0: 100.0          # initial midprice
+  mu: 0.0            # drift
+  sigma: 0.3         # volatility (constant)
+  eta: 1.0e-6        # temporary impact h(v) = eta*v
+  gamma: 1.0e-7      # permanent impact g(v) = gamma*v
+  lam: 1.0e-6        # risk aversion, gives kappa*T = 0.3 (near-TWAP regime)
+  terminal_penalty: 1.0e-3
+  # Minimal observation: (t/N, q/Q). Price is irrelevant in the LQ-cost
+  # formulation; including it just gives the network noise to overfit to.
+  include_price_obs: false
+  include_vol_obs: false
+  include_eta_obs: false
+  impact_type: linear
+  sigma_profile: constant
+  sigma_amplitude: 0.0
+  sigma_noise_std: 0.0
+  eta_rho: 0.0
+  eta_noise_std: 0.0
+
+n_envs: 8
+
+ppo:
+  policy: beta             # Beta(alpha,beta) on [0,1] — avoids Gaussian boundary bias
+  device: cpu
+  learning_rate: 3.0e-4    # 1e-4 only needed for Phase 2's wider reward distribution;
+                           # Phase 1's reward scale is small enough that 3e-4 is stable
+  lr_schedule: constant
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 10
+  gamma: 1.0               # undiscounted; matches AC's objective on a 50-step bounded episode
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  target_kl: 0.03

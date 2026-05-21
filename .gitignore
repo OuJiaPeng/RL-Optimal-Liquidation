@@ -1,0 +1,49 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual envs
+.venv/
+venv/
+env/
+.env
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# RL artifacts
+runs/
+checkpoints/
+*.zip
+*.pkl
+tensorboard/
+
+# Raw / processed data (Python package src/.../data is NOT ignored)
+/data/raw/
+/data/processed/
+*.parquet
+
+# Learning / scratch notebooks (kept local; not part of the shipped repo)
+notebooks/
+.ipynb_checkpoints/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

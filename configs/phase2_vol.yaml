@@ -1,0 +1,52 @@
+# Phase 2 vol-conditioning — time-varying sigma with per-episode noise.
+#
+# Setup designed so closed-loop sigma_hat-conditioning has measurable value:
+#   lam=1e-4 puts us at kappa*T=3.0 (schedule shape gap to constant: 7.7%).
+#   sigma_profile=u_shaped with amplitude 0.5 gives intraday-style U pattern.
+#   sigma_noise_std=0.3 gives per-episode scale draws in [0.4, 1.6] approx —
+#   wide enough that t alone doesn't predict sigma_hat, agent must read its
+#   sigma_hat input to plan the trajectory.
+#
+# Oracle: sigma-conditioning is worth ~5% over AC at this setup (matched-pair
+# MC). Agent captures ~32% (= 1.6% beat over AC) across 5 seeds. Probe shows
+# monotonic sensitivity across full (k, q, sigma_hat) grid.
+
+env:
+  Q: 1.0e+6
+  T: 1.0
+  N: 50
+  S0: 100.0
+  mu: 0.0
+  sigma: 0.3
+  eta: 1.0e-6
+  gamma: 1.0e-7
+  lam: 1.0e-4              # kappa*T = 3.0 — schedule structure matters
+  terminal_penalty: 1.0e-3
+  include_price_obs: false
+  include_vol_obs: true    # sigma_hat / sigma_0 in obs
+  include_eta_obs: false
+  impact_type: linear
+  sigma_profile: u_shaped
+  sigma_amplitude: 0.5
+  sigma_noise_std: 0.3     # per-episode multiplicative scale
+  eta_rho: 0.0
+  eta_noise_std: 0.0
+
+n_envs: 8
+
+ppo:
+  policy: beta
+  device: cpu
+  learning_rate: 1.0e-4    # tighter than Phase 1; Phase 2 reward scale is ~4x bigger,
+                           # NaN crashes appear at 3e-4 (gradient spikes during VecNormalize warmup)
+  lr_schedule: constant
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 10
+  gamma: 1.0
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.25      # 0.5 -> 0.25; further protection against grad spikes at the wider reward scale
+  target_kl: 0.03
