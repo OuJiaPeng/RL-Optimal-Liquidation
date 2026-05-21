@@ -18,7 +18,7 @@ serve as the σ̂ input to the Phase 2 vol-conditional policy.
 | **Phase 2 vol** — stochastic σ, u-shape profile | **−1.22% mean gap (beats AC)** across 5 seeds | Agent captures 32% of the 3.79% available oracle value via closed-loop σ̂-conditioning |
 | **Phase 2 spread** — stochastic η (per-step AR(1)) | Mixed: agent learns direction but mistunes magnitude | Informative negative — characterizes when on-policy RL needs recurrent state |
 
-![Vol-conditioning probe](runs/phase2_n30_s0/diagnostics/vol_conditioning.png)
+![Vol-conditioning probe](docs/figures/vol_conditioning.png)
 
 *Same agent, three σ profiles. Inventory trajectories (middle panel) diverge in the predicted direction: under inverted-U (σ high midday), the agent sells faster midday; under u-shape (σ high at boundaries), it sells faster at the ends. Direction-correct closed-loop control verified on **30/30 state grid cells**.*
 
