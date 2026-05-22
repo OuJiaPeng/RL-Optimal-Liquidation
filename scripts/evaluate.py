@@ -33,7 +33,7 @@ def main():
     # --- AC analytical (deterministic equivalent, drift = 0) ---
     analytic = ac_expected_cost(
         params.Q, params.T, params.N,
-        params.lam, params.sigma, params.eta, params.gamma,
+        params.lam, params.sigma, params.eta,
     )
     print(f"AC analytical cost   : {analytic:.4e}")
 

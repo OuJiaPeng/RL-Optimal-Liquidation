@@ -14,8 +14,13 @@ env:
   S0: 100.0          # initial midprice
   mu: 0.0            # drift
   sigma: 0.3         # volatility (constant)
-  eta: 1.0e-6        # temporary impact h(v) = eta*v
-  gamma: 1.0e-7      # permanent impact g(v) = gamma*v
+  eta: 1.0e-6        # temporary impact h(v) = eta*v (enters per-step cost)
+  gamma: 1.0e-7      # permanent impact g(v) = gamma*v. Textbook AC: enters
+                     # only via midprice dynamics (S -= gamma*a); the
+                     # schedule-independent (1/2)*gamma*Q^2 cost contribution
+                     # drops from the optimization and is not in the reward.
+                     # With include_price_obs: false (Phase 1 default), gamma
+                     # has no observable effect on training.
   lam: 1.0e-6        # risk aversion, gives kappa*T = 0.3 (near-TWAP regime)
   terminal_penalty: 1.0e-3
   # Minimal observation: (t/N, q/Q). Price is irrelevant in the LQ-cost

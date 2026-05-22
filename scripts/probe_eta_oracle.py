@@ -29,13 +29,14 @@ from rl_optimal_liquidation.envs import LiquidationParams
 
 
 def cost_of_schedule(f_array: np.ndarray, eta_traj: np.ndarray, p: LiquidationParams) -> float:
-    """Per-step cost of a given schedule (fractions) under a given eta trajectory."""
+    """Per-step cost of a given schedule (fractions) under a given eta trajectory.
+    Textbook AC linear branch: no per-step perm cost."""
     dt = p.T / p.N
     q = p.Q
     total = 0.0
     for k in range(p.N):
         a = f_array[k] * q
-        total += eta_traj[k] * a * a / dt + p.gamma * a * a + p.lam * p.sigma * p.sigma * q * q * dt
+        total += eta_traj[k] * a * a / dt + p.lam * p.sigma * p.sigma * q * q * dt
         q = q - a
     total += p.terminal_penalty * q * q
     return float(total)
@@ -74,7 +75,8 @@ def perfect_foresight_cost(eta_traj: np.ndarray, p: LiquidationParams, n_iter: i
         for k in range(p.N):
             a = f[k] * q
             sigma_k = p.sigma  # constant in this experiment
-            total = total + eta_t[k] * a * a / dt + p.gamma * a * a + p.lam * sigma_k * sigma_k * q * q * dt
+            # Textbook AC linear branch: no per-step perm cost (drops as constant).
+            total = total + eta_t[k] * a * a / dt + p.lam * sigma_k * sigma_k * q * q * dt
             q = q - a
         total = total + p.terminal_penalty * q * q
         total.backward()

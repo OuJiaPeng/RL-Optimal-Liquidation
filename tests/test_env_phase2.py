@@ -32,16 +32,35 @@ def test_sqrt_impact_perm_cost_concave_in_a():
     assert 25.0 < ratio < 35.0, f"Expected ~31.6x (a^1.5); got {ratio:.2f}x"
 
 
-def test_linear_impact_perm_cost_quadratic_in_a():
-    """At impact_type='linear', per-step perm cost grows as a^2."""
-    p = LiquidationParams(impact_type="linear", sigma=0.0, terminal_penalty=0.0)
+def test_linear_impact_omits_perm_cost_from_reward():
+    """Textbook AC: linear branch has no per-step perm cost in the reward.
+    gamma still drops the midprice (so the price evolves), but it doesn't
+    enter the agent's cost. The 1/2*gamma*Q^2 contribution is a sunk constant
+    and is documented as such."""
+    p = LiquidationParams(impact_type="linear", sigma=0.0, terminal_penalty=0.0,
+                          gamma=1.0e-7)
     env = LiquidationEnv(p, seed=0)
     env.reset(seed=0)
-    _, _, _, _, info_small = env.step(np.array([0.01], dtype=np.float32))
+    obs, reward, _, _, info = env.step(np.array([0.10], dtype=np.float32))
+    # Reward should equal -temp_cost exactly (no perm term, sigma=0 kills inv_pen).
+    assert info["perm_cost"] == 0.0
+    assert reward == pytest.approx(-info["temp_cost"], rel=1e-9)
+
+
+def test_linear_impact_perm_drops_price():
+    """Even though linear-branch perm doesn't enter cost, gamma still
+    permanently drops the midprice (S -= gamma * a). This is the AC
+    permanent-impact effect; it shows up via the price observation if
+    include_price_obs=True, not via the reward."""
+    p = LiquidationParams(impact_type="linear", sigma=0.0, mu=0.0,
+                          gamma=1.0e-7, terminal_penalty=0.0)
+    env = LiquidationEnv(p, seed=0)
     env.reset(seed=0)
-    _, _, _, _, info_big = env.step(np.array([0.10], dtype=np.float32))
-    ratio = info_big["perm_cost"] / info_small["perm_cost"]
-    assert 95.0 < ratio < 105.0, f"Expected ~100x (a^2); got {ratio:.2f}x"
+    a_frac = 0.10
+    a_shares = a_frac * p.Q
+    _, _, _, _, info = env.step(np.array([a_frac], dtype=np.float32))
+    expected_price = p.S0 - p.gamma * a_shares
+    assert info["price"] == pytest.approx(expected_price, rel=1e-9)
 
 
 def test_sigma_profile_constant():

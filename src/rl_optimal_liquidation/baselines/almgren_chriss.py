@@ -38,16 +38,19 @@ def ac_schedule(
 
 def ac_expected_cost(
     Q: float, T: float, N: int,
-    lam: float, sigma: float, eta: float, gamma: float,
+    lam: float, sigma: float, eta: float,
 ) -> float:
     """Deterministic-equivalent execution cost under the AC discrete schedule.
 
-    Sums the same per-step cost expression the env reports as negative reward:
-        eta a^2 / dt  +  gamma a^2  +  lam sigma^2 q^2 dt
+    Sums the same per-step cost expression the env reports as negative reward
+    in the textbook-AC linear-impact regime:
+        eta a^2 / dt  +  lam sigma^2 q^2 dt
     Drift, noise, and terminal penalty are zero by construction (q*_N = 0).
+    The permanent-impact constant (1/2)*gamma*Q^2 is omitted because it does not
+    affect the optimization and is not part of the env's reward.
     """
     dt = T / N
     a = ac_schedule(Q, T, N, lam, sigma, eta)
     q = ac_inventory_path(Q, T, N, lam, sigma, eta)[:-1]
-    cost = (eta * a * a) / dt + gamma * a * a + lam * sigma * sigma * q * q * dt
+    cost = (eta * a * a) / dt + lam * sigma * sigma * q * q * dt
     return float(cost.sum())

@@ -15,9 +15,16 @@ from rl_optimal_liquidation.envs import LiquidationEnv, LiquidationParams
 from rl_optimal_liquidation.policies import BetaActorCriticPolicy
 
 
-def make_env_thunk(env_cfg: dict):
+def make_env_thunk(env_cfg: dict, seed: int):
+    """Build a thunk that constructs one env with a deterministic seed.
+
+    Seeding the env (not just PPO) makes price/η/σ-scale trajectories
+    reproducible across runs with the same --seed argument. Without this,
+    PPO's seed only fixes network init + action sampling — env stochasticity
+    drifts from OS entropy.
+    """
     def thunk():
-        return Monitor(LiquidationEnv(LiquidationParams(**env_cfg)))
+        return Monitor(LiquidationEnv(LiquidationParams(**env_cfg), seed=seed))
     return thunk
 
 
@@ -42,7 +49,12 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_envs = int(cfg.get("n_envs", 4))
-    env = DummyVecEnv([make_env_thunk(cfg["env"]) for _ in range(n_envs)])
+    # Each env gets a distinct seed derived from args.seed so they explore
+    # different trajectories but the whole sweep is reproducible per --seed.
+    env = DummyVecEnv([
+        make_env_thunk(cfg["env"], seed=args.seed * n_envs + i)
+        for i in range(n_envs)
+    ])
 
     # Rewards in this env are O(1e6)-O(1e9) which swamps the value head.
     # VecNormalize tracks a running std of returns and rescales rewards to ~O(1),

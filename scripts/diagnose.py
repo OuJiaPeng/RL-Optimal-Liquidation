@@ -81,7 +81,7 @@ def main():
     dt = params.T / params.N
     analytic = ac_expected_cost(
         params.Q, params.T, params.N,
-        params.lam, params.sigma, params.eta, params.gamma,
+        params.lam, params.sigma, params.eta,
     )
     plot_inventory_trajectory(rl_inv, ac_inv, dt=dt).savefig(out_dir / "inventory.png", dpi=150)
     plot_action_fraction(rl_inv, rl_act, ac_inv, ac_act).savefig(out_dir / "actions.png", dpi=150)

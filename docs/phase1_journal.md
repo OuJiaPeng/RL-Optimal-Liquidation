@@ -517,6 +517,18 @@ state space) but PPO+Beta+MLP at our scale can't tune the magnitude precisely
 enough — high signal strength produces high policy variance, and the variance
 swamps the conditioning benefit on average.
 
+> **Footnote on the spread oracle.** The 7.55% "value of perfect η-conditioning"
+> is a *perfect-foresight* upper bound: the oracle optimizes a 50-step schedule
+> knowing the full η trajectory in advance. A real closed-loop policy can only
+> condition on past+present η and so cannot attain this; the achievable
+> closed-loop value is strictly less than 7.55%. The number is still useful
+> for the binary "is there value to capture" question (compare 0.18% at
+> noise=0.3 vs 7.55% at noise=2.0), but the agent's "captures ~0% of 7.55%"
+> framing understates what's structurally achievable. Computing the optimal
+> *open-loop-given-distribution* baseline (and the optimal causal policy via
+> dynamic programming on the AR(1) state) would tighten the ceiling but
+> wasn't worth the complexity for an arm we were de-emphasizing.
+
 ## Unifying interpretation
 
 Across Phase 2 experiments, the controlling variable is **value of conditioning
@@ -559,3 +571,48 @@ per-step path is much harder for on-policy methods without recurrent state.
 Three configs ship: `configs/default.yaml` (= Phase 1), `configs/phase2_vol.yaml`,
 and `configs/phase2_spread.yaml`. Each is documented inline and reproduces
 the corresponding result with 5-seed `python scripts/train_ppo.py --config <file>`.
+
+## Notes — textbook-AC alignment and post-audit cleanup
+
+A post-hoc audit caught a discrepancy between the cost functional in the
+project PDF and what the env actually computed. The original env per-step
+cost was
+
+    eta · a² / Δt   +   gamma · a²   +   lam · σ² · q² · Δt
+
+The temporary-impact term `eta · a² / Δt` is a faithful discretization of
+∫ η v² dt (Riemann sum: η v² · Δt with v = a/Δt). The permanent-impact term
+`gamma · a²`, however, is neither (a) a faithful discretization of the PDF's
+∫ v · g(v) dt (which would give `gamma · a² / Δt` — off by a factor of Δt),
+nor (b) the textbook-AC ∫ g(v) · q dt (which integrates to the
+schedule-independent constant ½γQ² and doesn't appear in the per-step reward
+at all). It was a third stylized form.
+
+At Phase 1 parameters (γ=1e-7, η=1e-6, Δt=0.02) the `gamma · a²` term
+contributed ~0.2% of total cost, dominated by the temp-impact term. So
+direct-opt landed within 0.094% of the AC analytic — close enough that the
+discrepancy went unnoticed during the original Phase 1 runs.
+
+**The fix (this pass).** Switched the linear-impact branch to the textbook-AC
+formulation: γ enters the env only through midprice dynamics (S -= γ·a),
+not through the per-step cost. The schedule-independent ½γQ² constant is
+documented and omitted. `ac_expected_cost`, `direct_schedule_opt`, and both
+Phase-2 oracles drop the `gamma · a²` term in lock-step so all baselines
+stay self-consistent. Sqrt-impact branch (Phase 2.1 dead-end) is unchanged.
+
+**What this means for shipped numbers.** The change shifts both the RL
+policy's measured cost and the AC reference cost down by the same ~0.2% in
+the linear regime — the *relative gap* (RL vs AC) shifts by ~0.2% as well,
+which is well inside the [1.26%, 4.37%] seed band already reported in Phase 1.
+Re-evaluating existing best_model checkpoints under the updated env confirms
+this; no retraining was needed. See `scripts/reevaluate_after_textbook_ac.py`
+for the cross-check.
+
+**Other small cleanups in the same pass.**
+- `scripts/probe_vol_conditioning.py` default config corrected from
+  `configs/default.yaml` (2-D obs) to `configs/phase2_vol.yaml` (3-D obs),
+  which is what the Phase-2 model expects.
+- `scripts/train_ppo.py` now seeds each env in the VecEnv with a deterministic
+  per-index seed derived from `--seed`. Previously, only PPO's network init
+  and action sampling were seeded; env price/η/σ-scale trajectories drifted
+  from OS entropy. Reproducibility per `--seed` is now end-to-end.

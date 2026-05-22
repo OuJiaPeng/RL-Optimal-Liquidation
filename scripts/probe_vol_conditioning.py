@@ -36,7 +36,10 @@ from rl_optimal_liquidation.policies import BetaActorCriticPolicy  # noqa: F401
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="runs/phase2_final_s0/best_model.zip")
-    ap.add_argument("--config", default="configs/default.yaml")
+    ap.add_argument("--config", default="configs/phase2_vol.yaml",
+                    help="Must be the phase2_vol config (model expects 3-D obs with"
+                         " sigma_hat); the phase1/default configs have include_vol_obs=False"
+                         " and would produce a 2-D obs that mismatches the model.")
     ap.add_argument("--output", default=None,
                     help="Plot path. Defaults to <model_dir>/diagnostics/vol_conditioning.png")
     ap.add_argument("--seed", type=int, default=42)

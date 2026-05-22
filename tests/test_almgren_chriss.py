@@ -51,9 +51,13 @@ def test_env_with_ac_policy_finishes_at_zero_inventory():
 
 def test_env_ac_cost_matches_analytical_when_sigma_zero():
     # No price noise, no terminal penalty => env cost == analytical AC cost.
+    # gamma=0 so we don't have to worry about whether perm impact would shift
+    # one side vs the other; with the textbook-AC formulation both env and
+    # analytic drop perm entirely from the cost regardless of gamma's value,
+    # but pinning gamma=0 keeps this test independent of that convention.
     params = LiquidationParams(
         Q=1e6, T=1.0, N=50, S0=100.0, mu=0.0, sigma=0.0,
-        eta=1e-6, gamma=1e-7, lam=1e-6, terminal_penalty=0.0,
+        eta=1e-6, gamma=0.0, lam=1e-6, terminal_penalty=0.0,
     )
     env = LiquidationEnv(params, seed=0)
     out = rollout(env, ac_policy_fn(env))
@@ -63,6 +67,6 @@ def test_env_ac_cost_matches_analytical_when_sigma_zero():
     # analytical-cost call uses the env's stated sigma. They should agree.
     analytic = ac_expected_cost(
         params.Q, params.T, params.N,
-        params.lam, params.sigma, params.eta, params.gamma,
+        params.lam, params.sigma, params.eta,
     )
     assert env_cost == pytest.approx(analytic, rel=1e-6)

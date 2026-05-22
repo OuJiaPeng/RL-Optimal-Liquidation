@@ -18,7 +18,19 @@ class LiquidationParams:
     mu: float = 0.0               # drift
     sigma: float = 0.3            # midprice volatility
     eta: float = 1.0e-6           # temporary impact coefficient (h(v) = eta * v)
-    gamma: float = 1.0e-7         # permanent impact coefficient (g(v) = gamma * v)
+    gamma: float = 1.0e-7         # permanent impact coefficient (g(v) = gamma * v).
+                                  # Linear branch: enters ONLY through midprice dynamics
+                                  # (S -= gamma*a), not through the per-step cost. This
+                                  # matches textbook Almgren-Chriss, where the permanent-
+                                  # impact contribution to total cost integrates to the
+                                  # schedule-independent constant (1/2)*gamma*Q^2 and so
+                                  # drops out of the optimization. The agent only sees
+                                  # the price drift if include_price_obs=True; with the
+                                  # default include_price_obs=False, gamma has no observable
+                                  # effect on training in the linear regime.
+                                  # Sqrt branch (Phase-2 dead-end, not shipped) keeps
+                                  # gamma*a^(3/2) in the per-step cost as a stylized
+                                  # concave-impact penalty.
     lam: float = 1.0e-6           # risk aversion lambda
     terminal_penalty: float = 1.0e-3  # M in -M * q_N^2
     include_price_obs: bool = True    # add S/S0 to obs (irrelevant for LQ optimum)
@@ -94,7 +106,12 @@ class LiquidationEnv(gym.Env):
     Action:   f_k in [0, 1], shares sold this step a_k = f_k * q_k
     Reward:   -(eta a_k^2 / dt  +  perm(a_k)  +  lam sigma(t_k)^2 q_k^2 dt)
               with terminal penalty -M * q_N^2 if inventory remains at step N.
-              perm(a) = gamma a^2 (linear) or gamma a^(3/2) (sqrt).
+              perm(a) = 0 in the linear branch (textbook AC: permanent impact's
+              contribution to total cost is the schedule-independent constant
+              (1/2)*gamma*Q^2, which drops from the optimization);
+              perm(a) = gamma * a^(3/2) in the sqrt branch (stylized penalty).
+              In both branches, gamma still updates the midprice via the price-
+              dynamics term S -= gamma*a (linear) or gamma*sqrt(a) (sqrt).
     """
 
     metadata = {"render_modes": []}
@@ -164,9 +181,14 @@ class LiquidationEnv(gym.Env):
         # or in reset). After cost is computed we evolve η for the next obs.
         temp_cost = self._eta_k * a * a / self._dt
         if self.p.impact_type == "linear":
-            perm_cost = self.p.gamma * a * a
+            # Textbook AC: permanent impact contributes the schedule-independent
+            # constant (1/2)*γ*Q^2 to total cost and so drops from the optimization.
+            # We omit it from the per-step reward entirely; γ still affects the
+            # simulated midprice via perm_price_drop below.
+            perm_cost = 0.0
             perm_price_drop = self.p.gamma * a
-        else:  # sqrt: g(v) = γ√v -> per-step cost a·g(v) ~ γ·a^(3/2)
+        else:  # sqrt: g(v) = γ√v -> stylized per-step cost γ·a^(3/2). Dead-end
+               # arm from Phase 2.1; kept for completeness but not shipped.
             sqrt_a = np.sqrt(max(a, 0.0))
             perm_cost = self.p.gamma * a * sqrt_a
             perm_price_drop = self.p.gamma * sqrt_a

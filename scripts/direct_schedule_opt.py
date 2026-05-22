@@ -28,8 +28,9 @@ from rl_optimal_liquidation.envs import LiquidationParams
 
 def schedule_cost(f: torch.Tensor, p: LiquidationParams, dt: float) -> torch.Tensor:
     """Deterministic execution cost for schedule f ∈ (0,1)^N (incl. terminal penalty).
-    Branches on `p.impact_type` for the perm cost, and uses `p.sigma_at(t_k)`
-    so it honors time-varying volatility. Mirrors the env's per-step cost exactly."""
+    Mirrors the env's per-step cost exactly: textbook AC in the linear branch
+    (no per-step perm cost; γ enters only via price dynamics, which don't appear
+    in the cost), stylized γ·a^(3/2) penalty in the sqrt branch."""
     q = torch.tensor(p.Q, dtype=f.dtype)
     total = torch.zeros((), dtype=f.dtype)
     for k in range(p.N):
@@ -37,7 +38,7 @@ def schedule_cost(f: torch.Tensor, p: LiquidationParams, dt: float) -> torch.Ten
         sigma_k = p.sigma_at(k * dt)  # python float; multiplies tensors fine
         temp = p.eta * a * a / dt
         if p.impact_type == "linear":
-            perm = p.gamma * a * a
+            perm = torch.zeros((), dtype=f.dtype)
         else:  # sqrt: clamp to avoid sqrt(0) gradient blow-up
             perm = p.gamma * a * torch.sqrt(a.clamp(min=1e-12))
         inv = p.lam * sigma_k * sigma_k * q * q * dt
@@ -91,7 +92,7 @@ def main():
     print(f"  Direct-opt cost ({p.impact_type}): {direct_cost:.6e}")
 
     if p.impact_type == "linear":
-        ac_analytic = ac_expected_cost(p.Q, p.T, p.N, p.lam, p.sigma, p.eta, p.gamma)
+        ac_analytic = ac_expected_cost(p.Q, p.T, p.N, p.lam, p.sigma, p.eta)
         q_ac = ac_inventory_path(p.Q, p.T, p.N, p.lam, p.sigma, p.eta)
         a_ac = q_ac[:-1] - q_ac[1:]
         f_ac = torch.tensor(a_ac / np.maximum(q_ac[:-1], 1e-9), dtype=torch.float64)
