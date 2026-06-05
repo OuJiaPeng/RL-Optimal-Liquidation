@@ -1,9 +1,8 @@
 # Default config = Phase 1 (reproduce Almgren-Chriss in the linear-impact
 # regime). PPO+Beta+1M should land within [0.8, 4.0]% of AC across seeds.
 #
-# For Phase 2 experiments, use one of:
-#   --config configs/phase2_vol.yaml     (time-varying sigma, positive result)
-#   --config configs/phase2_spread.yaml  (stochastic eta, informative mixed result)
+# For the Phase 2 experiment, use:
+#   --config configs/phase2_vol.yaml     (time-varying sigma; the certainty-equivalence ceiling)
 #
 # Identical to configs/phase1.yaml. Kept as a separate file so scripts that
 # default to "configs/default.yaml" reproduce the canonical Phase 1 baseline
@@ -26,13 +25,9 @@ env:
   terminal_penalty: 1.0e-3
   include_price_obs: false
   include_vol_obs: false
-  include_eta_obs: false
-  impact_type: linear
   sigma_profile: constant
   sigma_amplitude: 0.0
   sigma_noise_std: 0.0
-  eta_rho: 0.0
-  eta_noise_std: 0.0
 
 n_envs: 8
 

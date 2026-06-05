@@ -7,9 +7,10 @@
 #   wide enough that t alone doesn't predict sigma_hat, agent must read its
 #   sigma_hat input to plan the trajectory.
 #
-# Oracle: sigma-conditioning is worth ~5% over AC at this setup (matched-pair
-# MC). Agent captures ~32% (= 1.6% beat over AC) across 5 seeds. Probe shows
-# monotonic sensitivity across full (k, q, sigma_hat) grid.
+# Oracle: sigma-conditioning is worth ~3.79% over AC at this setup (matched-pair
+# MC, perfect-foresight). Agent captures ~32% (= 1.22% beat over AC) across 5 seeds.
+# Probe shows monotonic sensitivity across the full (k, q, sigma_hat) grid (30/30 cells,
+# all seeds; see scripts/probe_conditioning_grid.py).
 
 env:
   Q: 1.0e+6
@@ -24,13 +25,9 @@ env:
   terminal_penalty: 1.0e-3
   include_price_obs: false
   include_vol_obs: true    # sigma_hat / sigma_0 in obs
-  include_eta_obs: false
-  impact_type: linear
   sigma_profile: u_shaped
   sigma_amplitude: 0.5
   sigma_noise_std: 0.3     # per-episode multiplicative scale
-  eta_rho: 0.0
-  eta_noise_std: 0.0
 
 n_envs: 8
 

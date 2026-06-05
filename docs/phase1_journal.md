@@ -277,13 +277,96 @@ they get there cleanly.
 ## Settled Phase 1 baseline
 
 `policy=beta` + `total_timesteps=1M`, all other hyperparameters at SB3 defaults. Stable
-across seeds in the [0.8%, 4.0%] band. Phase 2 inherits this config.
+across seeds in the [1.3%, 4.4%] band, mean 2.84%. Phase 2 inherits this config.
 
-The journey from `gap=96,739%` (run 1) to `gap=0.80%` (run 7) took roughly the order
+The journey from `gap=96,739%` (run 1) to `gap≈2.8% mean` (run 7) took roughly the order
 listed in the lessons section below — reward scale dominated, then convergence
 mechanisms (target_kl, save-best, γ=1.0), then policy class (Beta), then training
 duration. Each ordering matters: bumping timesteps before fixing reward scale would
 have done nothing.
+
+### What the ~2.8% number actually represents
+
+Not approximation error and not policy-class expressivity (direct-opt with 50
+parameters reaches AC to −0.094%; the network is far more expressive than needed).
+Eval rollouts *are* deterministic (`rl_cost_std ≈ 2 × 10⁻¹⁰` across 200 episodes),
+so the number is exact — not eval noise.
+
+But it is **not the gradient-variance "equilibrium ball" noise floor either**. An
+earlier revision of this section made that claim; the trajectory data contradicts
+it. The `ac_eval.csv` for `runs/phase1_final_s0` (constant LR, single seed):
+
+| Step | Gap to AC |
+|---|---|
+| 80k  | 140.8% |
+| 160k | 9.6%   |
+| 240k | 339.1% |
+| 320k | 963.7% |
+| 400k | 465.9% |
+| 480k | 38.5%  |
+| 560k | 5.9%   |
+| 640k | 190.3% |
+| 720k | 355.8% |
+| **800k** | **1.54%** ← save-best fires here |
+| 880k | 123.9% |
+| 960k | 509.3% |
+
+The policy is not in a tight ball around AC. It cycles between brief near-AC transits
+(1–10% gap) and large pathological excursions (100–1000%), all the way to the end of
+training. **Save-best captures the lucky transits; everything else is discarded.**
+
+Final-model gaps across all 5 shipped Phase 1 seeds (diagnosed on `model.zip`, not
+`best_model.zip`):
+
+| Seed | Best-model gap | Final-model gap |
+|---|---|---|
+| 0 | 1.54% | 57.1% |
+| 1 | 3.80% | 272.0% |
+| 2 | 3.22% | 559.5% |
+| 3 | 4.37% | **8.5%** |
+| 4 | 1.26% | 538.3% |
+
+So the **2.84% mean is a *deployment* number**, not a convergence number. PPO + Beta
++ 64×64 MLP on this LQ env does not stably converge to AC's neighborhood. It passes
+through it periodically; we snapshot it via save-best.
+
+### The cliff-instability mechanism
+
+Gradient-variance jitter wouldn't produce 1000% excursions; the mechanism is
+the terminal-penalty cliff `M · q_N²`. If the policy under-sells by 5% of `Q`,
+terminal penalty = `1e-3 · (5e4)² = 2.5 × 10⁶`, which exceeds the entire AC cost
+(`1.03 × 10⁶`). Small changes to the last few actions flip whether the policy
+fully liquidates or stops short, and PPO's stochastic updates regularly tip the
+policy across that knife-edge in both directions.
+
+### Two LR-anneal experiments, both confirming non-convergence
+
+**Late anneal** (`configs/phase1_anneal.yaml`: constant LR for first 80%, anneal over
+last 20%). Save-best identical to constant-LR run because the captured checkpoint is
+from step 800k, before annealing engages (the two runs share an identical trajectory
+through 800k under the same seed). Final-model gap: **100.5%** — the annealed tail
+diverges from the constant-LR baseline (whose final is 57.1%); only the save-best
+checkpoint is shared. Single seed. The point stands: annealing the last 20% does not
+prevent the cliff-fall.
+
+**Early anneal** (`configs/phase1_anneal_early.yaml`: constant for first 20%, anneal
+linearly over remaining 80%). Save-best gap: 1.37% — basically the same lucky-transit
+floor. **Final-model gap: 313.7%**, even with LR down to ~4.5 × 10⁻⁵ by step 880k.
+Cliff-falls persist regardless of step size.
+
+The cliff is a structural property of the cost function, not an LR artifact. Smaller
+step sizes don't damp it within tested budgets.
+
+### What this means for the Phase 1 result
+
+PPO + Beta on this env produces a *deployable* policy (within ~3% of AC) via save-best
+on a wandering trajectory — not a converged policy. Honest framing: "best validated
+checkpoint within 1.3–4.4% of AC across 5 seeds; the policy itself does not stably
+converge to that neighborhood under tested configurations." Closing the gap further
+would require either changing the cost function (softer terminal handling), changing
+the algorithm class (off-policy + replay buffer for smoother updates, or pretrain →
+fine-tune), or constraining the policy parameterization (e.g., explicit terminal-
+forced-liquidation, removing the cliff). None tested in this release.
 
 ## Settled Phase 1 config
 
@@ -322,9 +405,13 @@ to converge; 500k is undertrained for Beta, see Run 6).
    `γ=1.0` and dropping the price obs were both principled, and both moved the
    gap by < 1 percentage point. Kept them anyway because the *reason* to make them
    doesn't depend on whether they help — they make the model match the problem.
-3. **PPO's noisy updates do useful work.** LR decay killed exploration and made things
-   worse. The "stochastic approximation says decay LR" argument doesn't apply when the
-   noise is the exploration mechanism.
+3. **PPO's noisy updates do useful early exploration; global LR decay starves that.**
+   Linearly decaying LR from step 0 made things worse because the policy hadn't yet
+   reached the right basin when its step size was already cut. The Robbins–Monro
+   argument for decaying LR still applies in principle — but the right schedule is
+   *two-phase* (constant to find the basin, then anneal to close the noise-floor
+   ball), not global linear decay. We did not test the two-phase variant; the global
+   one was a misadventure, not a refutation of the underlying noise-floor theory.
 4. **Single-run results are unreliable on stochastic-optimization problems.** Three seeds
    is the minimum to know whether a number is typical or lucky. The 5.7% that looked
    like a great result on seed 0 was just the bottom of a band that spans [5.8, 8.7]
@@ -346,35 +433,18 @@ to converge; 500k is undertrained for Beta, see Run 6).
 
 # Phase 2 — Where AC doesn't apply
 
+> **Note.** This journal's `Phase 2.x` headings are *build order* — the sequence of things tried.
+> The shipped Phase 2 result is the **vol-conditioning** experiment (2.2); 2.1 (the κT sweep) is
+> the key insight that led to it. See
+> [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the consolidated certainty-equivalence finding.
+
 The framework is validated at Phase 1. Now we test whether the agent can learn
 closed-loop control in regimes AC can't describe. The trajectory below is *not*
 "add a friction, train, measure." It's a sequence of dead-ends, diagnostic
 sweeps, and partial successes that progressively localized where on-policy RL
 adds value over AC and where it doesn't.
 
-## Phase 2.1 — Concave permanent impact (dead end)
-
-Switched `g(v) = γv` to `g(v) = γ√v` (`impact_type=sqrt` branch in
-`step()`). Initial gamma=1e-7 (Phase 1's value): direct-opt cost shifted from
-1.032e6 to 1.030e6 and the schedule was virtually unchanged. Bumped γ across
-five orders of magnitude:
-
-| γ | direct-opt cost | AC-in-sqrt cost | Gap (learnable signal) |
-|---|---|---|---|
-| 1e-2 | 2.44e6 | 2.45e6 | +0.17% |
-| 1e-1 | 1.50e7 | 1.52e7 | +0.89% |
-| 5e-1 | 6.89e7 | 7.17e7 | +4.13% |
-| 1.0 | 1.32e8 | 1.42e8 | +8.26% |
-
-Two findings: (a) cost *level* and learnable *signal* are decoupled — bumping γ
-by 100× grows total cost 100× but barely moves the optimal schedule shape;
-(b) at γ=1.0 the regime becomes degenerate (optimal stops fully liquidating
-because `M=10⁻³` is finite, so the agent rationally accepts terminal residual).
-
-**Conclusion:** AC's schedule shape is robust to the impact functional form.
-Concave permanent impact is the wrong Phase 2 wedge. Pivoted to time-varying σ.
-
-## Phase 2.2 — The κT regime sweep (key insight)
+## Phase 2.1 — The κT regime sweep (key insight)
 
 Before training under time-varying σ, ran a diagnostic that we should have
 done much earlier: for a sweep of λ values, optimize a single-parameter
@@ -404,7 +474,7 @@ f=0.324 at every (k, q, σ̂). Initially read as failure; the sweep showed it
 was the *correct* answer — there's nothing to learn at that κT. Picked κT=3
 (λ=1e-4) for all subsequent Phase 2 experiments.
 
-## Phase 2.3 — Vol-conditioning (positive result)
+## Phase 2.2 — Vol-conditioning (positive result)
 
 Setup: time-varying σ(t) with u-shape (high at open/close, low midday) plus
 per-episode multiplicative scale ~ N(1, σ_noise_std). The scale randomization
@@ -419,8 +489,9 @@ the agent learned the AC-shape schedule *without using σ̂*. The conditioning
 that could have been profitable wasn't discovered.
 
 **Bumped to σ_noise=0.3**: signal-to-noise ratio increases (σ_scale range
-[0.4, 1.6] vs [0.55, 1.45]). 5 seeds, all converged, **all 5 beat AC**
-(4 substantially, 1 barely):
+[0.4, 1.6] vs [0.55, 1.45]). 5 seeds, all converged, **all 5 beat *naive* AC**
+(4 substantially, 1 barely; comparable to CE-strengthened AC, not a beat of the best
+classical method — see docs/PROJECT_STATUS.md):
 
 | Seed | RL cost | AC cost | Gap |
 |---|---|---|---|
@@ -444,175 +515,64 @@ Oracle diagnostic (per-realization direct-opt knowing σ_scale, matched-pair MC)
 | 0.3 | 4.38e6 | 4.21e6 | **+3.79%** |
 
 At σ_noise=0.15, the maximum possible value of perfect σ̂-conditioning is
-only 1.98% over AC. The agent's failure to discover σ̂-conditioning at
-this noise level is consistent with "the available signal is below the
-gradient-noise floor of PPO+Beta." At σ_noise=0.3 the available value
-nearly doubles to 3.79%, and the agent captures **1.22% mean across 5
-seeds — about 32% of the oracle's value**. That capture rate is consistent
-with our Phase 1 observation that PPO+Beta+MLP reaches a near-optimum
-but not the exact optimum on a smooth problem.
+only 1.98% over AC. The agent's failure to discover σ̂-conditioning at this
+noise level is consistent with "the available signal is below the
+gradient-noise floor of PPO": the conditioning gradient and the policy-
+gradient-estimator noise are the same order of magnitude.
 
-**Phase 2.3 conclusion:** closed-loop σ-conditioning is learnable by PPO
+At σ_noise=0.3 the available value nearly doubles to 3.79%, and the agent
+captures **1.22% mean across 5 seeds — about 32% of the oracle's value**.
+
+**Decomposition (the rigorous way to read this result):** the agent's
+distance-to-true-optimum is essentially constant across phases —
+Phase 1 had a ~2.94% gap to direct-opt; Phase 2 has a 2.57% gap to oracle
+(3.79% − 1.22%). PPO's best-checkpoint imprecision (Phase 1 section above) is
+the *same* in both phases. What changes is the **location of the optimum**:
+in Phase 1 it sits at AC, in Phase 2 it sits 3.79% below *naive* AC. The
+"−1.22% vs naive AC" result is the derived consequence of "PPO finds a target
+~2.5% short of optimum, and the optimum has shifted 3.79% away from naive AC"
+(the agent only *matches* CE-strengthened AC; the win is over the naive
+baseline). This explains *why* RL beats naive AC rather than just reporting
+that it does, and predicts the margin over naive AC scales linearly with the
+oracle's distance from AC
+(modulo the constant ~3% PPO imprecision).
+
+**Phase 2.2 conclusion:** closed-loop σ-conditioning is learnable by PPO
 when the signal-to-noise ratio is large enough (0.15 → fails, 0.3 → works).
-
-## Phase 2.4 — Spread-conditioning (informative mixed result)
-
-Setup: constant σ, stochastic η as a log-AR(1) process. Per-step rather than
-per-episode noise. Intuition: η enters the *immediate* step reward (temp
-impact), so credit assignment should be easier than vol-conditioning where
-σ affects the integrated inventory penalty over the horizon.
-
-**First attempt (η_noise_std=0.3)**: with the `√Δt` scaling on innovations,
-stationary log-σ ≈ 0.10 → η range [0.84, 1.16] × η_mean. All 5 seeds were
-**worse than AC** by ~1%. Sensitivity grid showed weak conditioning at low
-q with some wrong-direction patches. Without an oracle baseline we couldn't
-distinguish "PPO failed" from "no value to capture."
-
-**Ran the oracle** (per-realization direct-opt knowing the full η trajectory):
-
-| η_noise_std | Effective η range | Oracle vs AC gap |
-|---|---|---|
-| 0.3 | [0.84, 1.16] | **+0.18%** |
-| 2.0 | [0.5, 2.0] | **+7.55%** |
-
-At noise=0.3 there's literally no value to capture (0.18% available, far
-below the gradient noise floor). Agent's 1%-worse result reflects "weak
-conditioning hurts more than it helps."
-
-**Retry at η_noise_std=2.0**: gives the originally-intended wide variation.
-Oracle says 7.55% is available. Trained 5 seeds; results were striking:
-
-| Seed | Save-best (20 ep) | Diagnose (200 ep) | RL cost std |
-|---|---|---|---|
-| 0 | −2.93% gap | **+10.06% gap** | 2.48e6 |
-| 1 | −4.10% | −0.47% | 1.42e6 |
-| 2 | −3.92% | +17.30% | 3.68e6 |
-| 3 | −3.59% | −2.79% | 0.81e6 |
-| 4 | −3.99% | +4.39% | 2.04e6 |
-
-Two findings here:
-
-1. **The sensitivity grid shows strong, direction-correct conditioning**:
-   max sensitivity 0.28 (10× the vol experiment's). At (k=0.95, q=0.1):
-   action goes 0.40 → 0.30 → 0.13 across η ∈ {0.5, 1.0, 2.0}. The agent
-   learned aggressive closed-loop response in the predicted direction
-   (high η → low action, "slow down when spread is wide").
-
-2. **But the magnitude is mistuned and variance dominates**: RL cost std
-   is 4-7× AC's. The agent's correct-shape response is too extreme — when
-   high-η persists for a few steps, it slows so much it can't liquidate;
-   when low-η persists, it dumps aggressively and eats the impact. On
-   200-episode evaluation, mean RL cost is ~5–6% **worse than AC** despite
-   best snapshots being within 1% of oracle.
-
-3. **Save-best with n_eval_episodes=20 is unreliable here**: standard error
-   per evaluation is ~17% of mean cost. With ~50 evals per training run,
-   false-positive "best" estimates are guaranteed. The agent never had a
-   true-mean −3% policy; it had a true-mean +5% policy whose 20-ep estimates
-   sometimes looked like −3%.
-
-**Phase 2.4 conclusion:** closed-loop conditioning is *learnable* on per-step
-stochastic friction (the agent does discover the correct direction across the
-state space) but PPO+Beta+MLP at our scale can't tune the magnitude precisely
-enough — high signal strength produces high policy variance, and the variance
-swamps the conditioning benefit on average.
-
-> **Footnote on the spread oracle.** The 7.55% "value of perfect η-conditioning"
-> is a *perfect-foresight* upper bound: the oracle optimizes a 50-step schedule
-> knowing the full η trajectory in advance. A real closed-loop policy can only
-> condition on past+present η and so cannot attain this; the achievable
-> closed-loop value is strictly less than 7.55%. The number is still useful
-> for the binary "is there value to capture" question (compare 0.18% at
-> noise=0.3 vs 7.55% at noise=2.0), but the agent's "captures ~0% of 7.55%"
-> framing understates what's structurally achievable. Computing the optimal
-> *open-loop-given-distribution* baseline (and the optimal causal policy via
-> dynamic programming on the AR(1) state) would tighten the ceiling but
-> wasn't worth the complexity for an arm we were de-emphasizing.
 
 ## Unifying interpretation
 
-Across Phase 2 experiments, the controlling variable is **value of conditioning
+The controlling variable across the Phase 2 probes is the **value of conditioning
 relative to policy variance**, not horizon length or PPO architecture:
 
 | Experiment | Stochasticity | Available value | Captured? |
 |---|---|---|---|
-| Concave impact, γ=1e-2 | none | 0.17% | n/a (skip) |
-| Vol, σ_noise=0.15 | per-episode | **1.98%** | No (agent ignores σ̂) |
-| **Vol, σ_noise=0.3** | **per-episode** | **3.79%** | **Yes, 1.22% mean (32% capture)** |
-| Spread, η_noise=0.3 | per-step AR(1) | 0.18% | No value exists |
-| Spread, η_noise=2.0 | per-step AR(1) | 7.55% | Direction yes, magnitude no |
+| Vol, σ_noise=0.15 | per-episode | **1.98%** | No — agent ignores σ̂ (signal below the noise floor) |
+| **Vol, σ_noise=0.3** | **per-episode** | **3.79%** | **Yes — 1.22% mean (≈32% capture)** |
 
-The per-episode vs per-step distinction matters more than expected:
-per-episode conditioning lets the agent commit to a schedule at step 0 and
-execute it; per-step conditioning forces 50 conditional decisions per episode,
-each with its own variance budget. Both can be learned in principle, but the
-per-step path is much harder for on-policy methods without recurrent state.
+At σ_noise=0.15 the maximum value of perfect σ̂-conditioning (1.98%) sits at the same
+order as PPO's policy-gradient noise, so the agent rationally ignores σ̂ and just
+reproduces the AC-shape schedule. Doubling the available value to 3.79% (σ_noise=0.3)
+lets the conditioning gradient clear the noise floor; the agent then captures ≈32% of
+it — **matching certainty-equivalence AC, beating only *naive* fixed AC**. The lesson is
+structural: what RL can capture is bounded by the value of conditioning the problem
+actually contains, not by horizon or architecture.
 
 ## Methodology lessons from Phase 2 (additions to Phase 1's lessons)
 
-1. **Run the value-of-conditioning oracle BEFORE concluding what a negative
-   result means.** Concave impact, vol@0.15, and spread@0.3 all looked like
-   "agent failed to learn" until the oracle showed the available value was
-   below the noise floor. The negative result is fundamentally different
-   from a PPO failure.
-2. **Per-episode and per-step stochasticity have very different learnability
-   profiles** for on-policy RL. Don't assume immediate-effect = easy.
-3. **`n_eval_episodes` in save-best must scale with policy variance.** For
-   low-variance policies (vol-conditioning), 20 was fine. For high-variance
-   policies (spread-conditioning at noise=2.0), 20 was useless — guaranteed
-   false-positive "best" estimates.
-4. **A 50-parameter direct-opt is the most useful single diagnostic in the
-   project.** It validated the env in Phase 1, characterized the κT regime
-   in Phase 2.2, and gave the value-of-conditioning baseline in 2.3/2.4.
-   Cheap (30 lines, runs in seconds) and decisive.
+1. **Run the value-of-conditioning oracle BEFORE concluding what a negative result
+   means.** The vol@0.15 case looked like "the agent failed to learn"
+   until the per-realization oracle showed the available value was below the
+   gradient-noise floor. "No value to capture" is a fundamentally different result
+   from "PPO failed to capture it" — and only the oracle distinguishes them.
+2. **A 50-parameter direct-opt is the most useful single diagnostic in the project.**
+   It validated the env in Phase 1 (−0.094% vs AC), characterized the κT regime in
+   Phase 2.1, and provided the value-of-conditioning oracle in 2.2. Cheap (≈30 lines,
+   runs in seconds) and decisive.
 
 ## Settled configs (final state)
 
-Three configs ship: `configs/default.yaml` (= Phase 1), `configs/phase2_vol.yaml`,
-and `configs/phase2_spread.yaml`. Each is documented inline and reproduces
-the corresponding result with 5-seed `python scripts/train_ppo.py --config <file>`.
-
-## Notes — textbook-AC alignment and post-audit cleanup
-
-A post-hoc audit caught a discrepancy between the cost functional in the
-project PDF and what the env actually computed. The original env per-step
-cost was
-
-    eta · a² / Δt   +   gamma · a²   +   lam · σ² · q² · Δt
-
-The temporary-impact term `eta · a² / Δt` is a faithful discretization of
-∫ η v² dt (Riemann sum: η v² · Δt with v = a/Δt). The permanent-impact term
-`gamma · a²`, however, is neither (a) a faithful discretization of the PDF's
-∫ v · g(v) dt (which would give `gamma · a² / Δt` — off by a factor of Δt),
-nor (b) the textbook-AC ∫ g(v) · q dt (which integrates to the
-schedule-independent constant ½γQ² and doesn't appear in the per-step reward
-at all). It was a third stylized form.
-
-At Phase 1 parameters (γ=1e-7, η=1e-6, Δt=0.02) the `gamma · a²` term
-contributed ~0.2% of total cost, dominated by the temp-impact term. So
-direct-opt landed within 0.094% of the AC analytic — close enough that the
-discrepancy went unnoticed during the original Phase 1 runs.
-
-**The fix (this pass).** Switched the linear-impact branch to the textbook-AC
-formulation: γ enters the env only through midprice dynamics (S -= γ·a),
-not through the per-step cost. The schedule-independent ½γQ² constant is
-documented and omitted. `ac_expected_cost`, `direct_schedule_opt`, and both
-Phase-2 oracles drop the `gamma · a²` term in lock-step so all baselines
-stay self-consistent. Sqrt-impact branch (Phase 2.1 dead-end) is unchanged.
-
-**What this means for shipped numbers.** The change shifts both the RL
-policy's measured cost and the AC reference cost down by the same ~0.2% in
-the linear regime — the *relative gap* (RL vs AC) shifts by ~0.2% as well,
-which is well inside the [1.26%, 4.37%] seed band already reported in Phase 1.
-Re-evaluating existing best_model checkpoints under the updated env confirms
-this; no retraining was needed. See `scripts/reevaluate_after_textbook_ac.py`
-for the cross-check.
-
-**Other small cleanups in the same pass.**
-- `scripts/probe_vol_conditioning.py` default config corrected from
-  `configs/default.yaml` (2-D obs) to `configs/phase2_vol.yaml` (3-D obs),
-  which is what the Phase-2 model expects.
-- `scripts/train_ppo.py` now seeds each env in the VecEnv with a deterministic
-  per-index seed derived from `--seed`. Previously, only PPO's network init
-  and action sampling were seeded; env price/η/σ-scale trajectories drifted
-  from OS entropy. Reproducibility per `--seed` is now end-to-end.
+The shipped Phase configs are `configs/phase1.yaml` (Phase 1; `configs/default.yaml`
+holds the same baseline) and `configs/phase2_vol.yaml`. Each is documented inline and
+reproduces its result with a 5-seed `python scripts/train_ppo.py --config <file>` sweep.
+The `configs/phase1_anneal*.yaml` variants reproduce the LR-anneal experiments above.

@@ -41,6 +41,9 @@ tensorboard/
 notebooks/
 .ipynb_checkpoints/
 
+# Archived exploratory chapters (kept local; not part of the shipped three-phase narrative)
+archive/
+
 # IDE / OS
 .vscode/
 .idea/

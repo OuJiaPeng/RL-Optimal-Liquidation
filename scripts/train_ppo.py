@@ -15,16 +15,9 @@ from rl_optimal_liquidation.envs import LiquidationEnv, LiquidationParams
 from rl_optimal_liquidation.policies import BetaActorCriticPolicy
 
 
-def make_env_thunk(env_cfg: dict, seed: int):
-    """Build a thunk that constructs one env with a deterministic seed.
-
-    Seeding the env (not just PPO) makes price/η/σ-scale trajectories
-    reproducible across runs with the same --seed argument. Without this,
-    PPO's seed only fixes network init + action sampling — env stochasticity
-    drifts from OS entropy.
-    """
+def make_env_thunk(env_cfg: dict):
     def thunk():
-        return Monitor(LiquidationEnv(LiquidationParams(**env_cfg), seed=seed))
+        return Monitor(LiquidationEnv(LiquidationParams(**env_cfg)))
     return thunk
 
 
@@ -49,12 +42,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_envs = int(cfg.get("n_envs", 4))
-    # Each env gets a distinct seed derived from args.seed so they explore
-    # different trajectories but the whole sweep is reproducible per --seed.
-    env = DummyVecEnv([
-        make_env_thunk(cfg["env"], seed=args.seed * n_envs + i)
-        for i in range(n_envs)
-    ])
+    env = DummyVecEnv([make_env_thunk(cfg["env"]) for _ in range(n_envs)])
 
     # Rewards in this env are O(1e6)-O(1e9) which swamps the value head.
     # VecNormalize tracks a running std of returns and rescales rewards to ~O(1),
@@ -70,8 +58,22 @@ def main():
     if lr_schedule == "linear":
         base_lr = float(ppo_kwargs["learning_rate"])
         ppo_kwargs["learning_rate"] = lambda progress_remaining: progress_remaining * base_lr
+    elif lr_schedule == "two_phase":
+        base_lr = float(ppo_kwargs["learning_rate"])
+        # Constant LR for the first lr_const_fraction of training, then anneal
+        # linearly to 0 over the remaining portion. lr_const_fraction=0.8 leaves
+        # only the last 20% for annealing (safe but mostly post-save-best);
+        # lr_const_fraction=0.2 anneals for 80% of training (much more aggressive,
+        # save-best samples from the annealed phase).
+        const_frac = float(ppo_kwargs.pop("lr_const_fraction", 0.8))
+        anneal_threshold = 1.0 - const_frac
+        def schedule(progress_remaining):
+            if progress_remaining > anneal_threshold:
+                return base_lr
+            return base_lr * (progress_remaining / anneal_threshold)
+        ppo_kwargs["learning_rate"] = schedule
     elif lr_schedule != "constant":
-        raise ValueError(f"unknown lr_schedule {lr_schedule!r}; use 'linear' or 'constant'")
+        raise ValueError(f"unknown lr_schedule {lr_schedule!r}; use 'constant', 'linear', or 'two_phase'")
 
     # Policy choice: gaussian (SB3 default MlpPolicy) or beta (our custom Box(0,1) policy).
     policy_choice = ppo_kwargs.pop("policy", "gaussian")

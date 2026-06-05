@@ -33,8 +33,7 @@ def opt_cost_at_scale(scale: float, p: LiquidationParams, n_steps: int = 3000) -
         for k in range(p.N):
             a = f[k] * q
             sigma_k = p.sigma * scale * (1.0 + p.sigma_amplitude * float(np.cos(2 * np.pi * k * dt / p.T)))
-            # Textbook AC linear branch: no per-step perm cost (drops as constant).
-            total = total + p.eta * a * a / dt + p.lam * sigma_k * sigma_k * q * q * dt
+            total = total + p.eta * a * a / dt + p.gamma * a * a + p.lam * sigma_k * sigma_k * q * q * dt
             q = q - a
         total = total + p.terminal_penalty * q * q
         total.backward()
@@ -50,8 +49,7 @@ def cost_of_schedule_at_scale(f_array: np.ndarray, scale: float, p: LiquidationP
     for k in range(p.N):
         a = f_array[k] * q
         sigma_k = p.sigma * scale * (1.0 + p.sigma_amplitude * float(np.cos(2 * np.pi * k * dt / p.T)))
-        # Textbook AC linear branch: no per-step perm cost (drops as constant).
-        total += p.eta * a * a / dt + p.lam * sigma_k * sigma_k * q * q * dt
+        total += p.eta * a * a / dt + p.gamma * a * a + p.lam * sigma_k * sigma_k * q * q * dt
         q = q - a
     total += p.terminal_penalty * q * q
     return float(total)
