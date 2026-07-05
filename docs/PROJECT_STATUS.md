@@ -9,77 +9,119 @@ Optimal trade execution: liquidate `Q` shares over a horizon, minimizing market 
 inventory risk. The classical answer is **Almgren–Chriss (AC)**, which is *provably optimal* in
 the linear-impact / quadratic-cost regime. This project validates reinforcement learning against
 AC where AC is optimal, then asks **whether, where, and why** RL adds value beyond the *best
-classical method a desk would actually deploy* — never a strawman. The deliverable is an honest
-*structural* boundary, not a horse-race win. "RL does not beat the best classical method here" is
-a result — stated with a precise reason.
+classical method a desk would actually deploy*, never a strawman. The deliverable is an honest
+*structural* boundary rather than a horse-race win. "RL does not beat the best classical method
+here" counts as a result when it comes with a precise reason.
 
 ## The arc — what RL can recover
 
 Three phases:
 
-1. **Recover.** Where AC is provably optimal, RL recovers it — validating the pipeline as a sound
-   measurement instrument.
-2. **Degrade one input.** Change a single input — time-varying volatility — so AC's *fixed*
-   schedule begins to degrade. The right classical fix is **certainty-equivalence AC** (re-estimate,
-   then act). RL **keeps up** with it but does not beat it: the problem stays linear-quadratic, so
-   CE-AC is the ceiling, and RL only **ties** it — beating only the *naive* fixed schedule, by the
-   small value of conditioning.
-3. **Open.** Where, *if anywhere*, does changing the problem make RL genuinely *necessary* over the
-   best classical method? Deliberate blank slate — not yet started.
+1. **Recover.** Where AC is provably optimal, RL recovers it, which validates the pipeline as a
+   sound measurement instrument.
+2. **Degrade one input.** Change a single input, time-varying volatility, so that AC's *fixed*
+   schedule goes stale. The right classical fix is **certainty-equivalence AC** (re-estimate, then
+   act), and the problem stays linear-quadratic, so CE-AC is the ceiling. RL learns genuine
+   closed-loop conditioning: it beats every *static* classical schedule and captures ~73% of the
+   CE-AC edge without reaching it.
+3. **Conclude.** Measure the exits from the LQ family instead of promising them. Every probed
+   escape route prices out below the agent's own optimization noise, so the boundary is the result.
 
 ### Phase 1 — recover
 RL **recovers** the AC optimum in the linear-impact regime where AC is provably optimal. The
-best-validated checkpoint lands **~2.84% mean** from AC (5 seeds, range 1.26–4.37%); final-of-
-training models do **not** converge (gaps 8.5–559%) — a structural **terminal-penalty cliff**,
-documented openly, so 2.84% is a save-best *deployment* number, not a convergence number. An
-independent 50-parameter direct optimizer reproduces AC to **−0.094%**, confirming the environment
-math and AC's optimality. *The pipeline is a validated measurement instrument.*
+best-validated checkpoint lands **~2.84% mean** from AC (5 seeds, range 1.26–4.37%), and the
+recovery holds where it discriminates: at κT=3 (λ=1e-4), where schedule shape is worth 7.7% versus
+0.017% in the original κT=0.3 regime, retrained agents land **+0.26–0.36% from AC** (3 seeds,
+`configs/phase1_kt3.yaml`).
+
+Two structural caveats keep the numbers honest. Final-of-training models do **not** reliably
+converge, a **terminal-penalty cliff** reconfirmed on the 2026-07 retrains (κT=3 finals +0.6%,
++1.4%, **+47%** against bests of +0.26–0.36%), so every recovery figure is a save-best *deployment*
+number rather than a convergence number. And the independent 50-parameter direct optimizer
+reproduces AC to **−0.094%**, a residual that is structural rather than optimizer noise: the *soft*
+terminal penalty (M=1e-3) makes leaving ~4.8% of the final step's inventory optimal, worth exactly
+−0.094% against the hard-liquidation closed form (the exact solver in
+`scripts/eval_phase2_baselines.py` reproduces it to four digits). The environment math is confirmed.
 
 ### Phase 2 — degrade one input (the certainty-equivalence ceiling)
-Change a single input: **time-varying volatility σ(t)** with per-episode scale noise, so a *fixed*
-AC schedule (computed once, at the mean σ) leaves value on the table. The right classical response
-is **certainty-equivalence AC** — re-estimate σ̂, then act on the estimate. The finding:
+RL beats every static classical schedule and captures ~73% of the certainty-equivalence ceiling,
+which it never reaches. The perturbation is a single input, **time-varying volatility σ(t)** with
+per-episode scale noise, which leaves the fixed AC schedule (computed once, at the base σ) stale. A
+full classical ladder prices each rung *exactly* on matched scenarios
+(`scripts/eval_phase2_baselines.py`: exact tridiagonal schedules, paired 95% CIs, 400 episodes):
 
-> **RL ≈ CE-AC (ties)  >  naive fixed AC (beaten only by the value of conditioning).**
+| Arm | Gap vs naive AC |
+|---|---|
+| **Smart-static** — best *single* schedule knowing the σ-profile + noise distribution, zero conditioning | **−1.33%** [−1.62, −1.05] |
+| **RL** (PPO, Gaussian policy, mean of 5 seeds; range −3.03…−3.70) | **−3.41%** [−3.93, −2.89] |
+| **CE-AC (= per-episode oracle)** — re-plan at the observed σ̂; σ̂₀ reveals the episode scale exactly, so this is the ceiling for *any* causal policy | **−4.66%** [−5.17, −4.14] |
 
-Trained PPO (custom Beta policy, 5 seeds) lands **−1.22% mean vs naive AC** at the best-validated
-checkpoint, with genuine closed-loop control verified *independently of cost*: the action is
-monotone and direction-correct in σ̂ across a **30×30 (k, q) state grid on all 5 seeds** — it sells
-faster when volatility is high. A per-realization matched-pair oracle puts the full value of
-*perfect* σ-conditioning at **3.79%** over naive AC; the agent captures **~32%** of it. The agent
-**matches** CE-AC and beats only the naive baseline.
+> **CE-AC  >  RL  >  smart-static  >  naive AC.** The agent beats the best static classical
+> schedule by **2.1pp** [1.7, 2.5] on *every* seed and captures **~73%** of the CE-AC edge. Of
+> CE-AC's 4.66%, 1.33pp is pure model knowledge (capturable with zero conditioning) and 3.32pp is
+> genuine per-episode conditioning; the agent's edge over smart-static shows it captures most of
+> the conditioning share. CE-AC itself remains unbeaten, as LQ theory requires.
 
-**Why CE wins, in one breath.** Because the cost is quadratic and the volatility uncertainty enters
-the inventory penalty only through its mean, "estimate the unknown, then act on the estimate"
-(certainty-equivalence) is already near-optimal — the problem never leaves the linear-quadratic
-family, so there is little left for a cleverer policy to exploit. Naive AC underperforms only
-because it never re-estimates; CE-AC does, cheaply. And because the cost surface is smooth and
-convex, conditioning on the realized path buys a small, *bounded* edge — never a structural win.
-This is the structural reason the result is a **ceiling, not a vol-specific quirk**: it is a
-property of certainty-equivalence in a quadratic objective, not of volatility.
+The conditioning is verified *causally, independently of cost*: at fixed (k, q) the action is
+monotone increasing in σ̂ on 26–30 of 30 probe-grid cells on every seed, and rolled out on σ
+profiles never seen in training (flat, inverted-U) the agent tracks the new σ̂ pattern rather than
+a memorized clock.
 
-### Phase 3 — open
-The first two phases establish a boundary: where the problem stays in the linear-quadratic family,
-perturbing an input never makes RL *necessary* — it only ties the best classical method. The honest
-next question — *where, if anywhere, does RL become necessary over the best classical method a desk
-would deploy?* — is genuinely open. **Phase 3 is a blank slate: no committed objective, not yet
-started.**
+**Policy-family finding** (from the 2026-07 retrain batch, 16 runs + 2 extras): the featured
+Gaussian policy succeeds **5/5 seeds**; the custom Beta policy is bimodal (2/5 discover
+conditioning), and a CE control-variate reward deepens capture when discovery happens (best
+−3.65%) but does not fix discovery — the bottleneck is exploration, not gradient variance. Likely
+mechanism: SB3's Gaussian keeps one state-independent log-σ (exploration stays alive everywhere),
+while Beta's state-dependent concentration can sharpen prematurely. The earlier "Beta > Gaussian"
+result was specific to Phase 1's κT=0.3 boundary regime — a claim inherited across sessions until
+re-measured.
+
+**Why CE wins.** The cost is quadratic and the volatility uncertainty enters the inventory penalty
+only through its mean, so "estimate the unknown, then act on the estimate" (certainty-equivalence)
+is already near-optimal. The problem never leaves the linear-quadratic family, which leaves little
+for a cleverer policy to exploit. Naive AC underperforms only because it never re-estimates, while
+CE-AC does so cheaply. Because the cost surface is smooth and convex, conditioning on the realized
+path buys a small, bounded edge and never a structural win. That is why the result is a **ceiling
+rather than a vol-specific quirk**: it is a property of certainty-equivalence in a quadratic
+objective, not of volatility.
+
+### Phase 3 — the boundary, measured (closed)
+The natural next question — *where does RL become necessary over the best classical method a desk
+would deploy?* — was probed rather than promised. The most credible exit from the LQ family is
+**impact-form misspecification**: real markets follow the square-root law (concave impact), a
+functional family no recalibration of a quadratic model can reach. Priced with zero-training
+exact solves before committing any RL to it: the best LQ-family schedule loses ≤ **0.85%** to the
+true concave-impact optimum across participation sizes 0.25×–64× and under stochastic liquidity
+co-moving with vol — below the agent's own optimization noise. No honest crossover exists there.
+
+The structural reason generalizes. As long as the objective stays quadratic and uncertainty enters
+through estimable parameters, certainty-equivalence is near-optimal and every fight is thin. The
+problems where RL *would* be necessary (nonlinear transient impact, multi-asset nonlinear,
+order-book queues) are exactly the ones where no exact benchmark exists to referee the claim. The
+model-free zone begins where the honest benchmark ends, and that boundary is the project's final
+result rather than its unfinished business. (Earlier exploratory chapters, including spreads,
+regimes, cross-impact, arrivals, and CVaR, live under `archive/`, each with its own README. They
+informed this framing, but the claims above rest only on what the active tree measures.)
 
 ## Why this is a conclusion, not abandonment
 
 The contribution is the structural boundary **plus** the measurement methodology the RL-execution
 literature largely lacks: a **value-of-conditioning oracle** (matched-pair Monte Carlo that
-separates "no value to capture" from "agent failed to capture it"), **state-space sensitivity-probe
-grids**, and a **5-seed best-AND-final protocol** that diagnoses convergence honestly rather than
-reporting a lucky checkpoint. The discipline of the boundary is what would make any future GO
+separates "no value to capture" from "agent failed to capture it"), a **classical baseline ladder**
+(naive / smart-static / CE-AC as exact schedules on matched scenarios — so "beats a baseline" can
+never mean "beats a strawman"), **state-space sensitivity-probe grids**, and a **5-seed
+best-AND-final protocol** that diagnoses convergence honestly rather than reporting a lucky
+checkpoint. The discipline of the boundary is what would make any future GO
 credible.
 
 ## Headline rule
 
-No "RL beats AC" anywhere. Frame as **"measuring when adaptive RL does and doesn't add value over
-AC, and why."** The Phase-2 line is: **RL ties CE-AC (the smart adaptive classical method); it
-beats only *naive* AC, by the value of conditioning.** Phase 3 is **open** — not yet started. Any
-claim that RL beats the *optimal* policy is wrong — it ties it.
+No "RL beats AC" unqualified, anywhere. Frame as **"measuring when adaptive RL does and doesn't
+add value over AC, and why."** The Phase-2 line is **CE-AC > RL > smart-static > naive AC**: the
+agent beats every static classical schedule and captures ~73% of the certainty-equivalence
+ceiling, it does not beat CE-AC, and in this family nothing can. Phase 3 is **closed as a measured
+boundary** rather than open, because every probed exit from the LQ family prices out below the
+agent's own imprecision. State it that way, not as "future work."
 
 ## Out of scope (this release)
 
@@ -89,10 +131,14 @@ not re-engineered).
 
 ## Methodology stack (the transferable contribution)
 
-`cost.py` single-source execution cost · analytic AC + 50-parameter direct-opt (env validation to
-−0.094%) · per-realization matched-pair MC oracle (the value of conditioning) · state-space
-sensitivity-probe grid (`scripts/probe_conditioning_grid.py`) · 5-seed protocol diagnosing **best
-AND final** · regression suite with degenerate-reproduces-base guards.
+one execution-cost formula, defined in `baselines/exact_lq.py` and mirrored exactly by the env ·
+analytic AC + exact tridiagonal schedule solver + 50-parameter direct-opt (env validation to
+−0.094%, a residual the soft terminal penalty fully explains) · classical baseline ladder — naive /
+smart-static / CE-AC on matched scenarios with paired CIs (`scripts/eval_phase2_baselines.py`;
+the CE-AC rung doubles as the per-realization value-of-conditioning oracle) · state-space
+sensitivity-probe grid (`scripts/probe_conditioning_grid.py`) · 5-seed protocol diagnosing
+**best AND final** · regression suite (14 tests) pinning the AC formulas, the exact solver, and
+env-vs-analytic cost equivalence.
 
 ## Reading order
 
@@ -106,5 +152,5 @@ make test                                # regression suite
 python scripts/direct_schedule_opt.py    # env / AC validation (-0.094%)
 make phase1                              # Phase 1 — recover AC                (~5 min)
 make phase2-vol                          # Phase 2 — vol-conditioning           (~5 min)
-make oracle                              # value-of-conditioning oracle
+make ladder                              # classical ladder: naive AC / smart-static / CE-AC vs RL
 ```

@@ -7,10 +7,11 @@
 #   wide enough that t alone doesn't predict sigma_hat, agent must read its
 #   sigma_hat input to plan the trajectory.
 #
-# Oracle: sigma-conditioning is worth ~3.79% over AC at this setup (matched-pair
-# MC, perfect-foresight). Agent captures ~32% (= 1.22% beat over AC) across 5 seeds.
-# Probe shows monotonic sensitivity across the full (k, q, sigma_hat) grid (30/30 cells,
-# all seeds; see scripts/probe_conditioning_grid.py).
+# NOTE: this is the Beta-policy variant — bimodal across seeds (2/5 discover
+# conditioning). The FEATURED Phase 2 config is phase2_vol_gaussian.yaml
+# (5/5 seeds, -3.41% vs naive AC; see the ladder: make ladder).
+# Ladder reference (paired CIs, gaps vs naive AC): smart-static -1.33%,
+# CE-AC/oracle -4.66%.
 
 env:
   Q: 1.0e+6

@@ -28,7 +28,7 @@ from rl_optimal_liquidation.policies import BetaActorCriticPolicy  # noqa: F401
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="configs/default.yaml")
+    ap.add_argument("--config", default="configs/phase1.yaml")
     ap.add_argument("--model", default="runs/phase1/best_model.zip",
                     help="Defaults to best-gap checkpoint; pass model.zip for the final one.")
     ap.add_argument("--episodes", type=int, default=200)
@@ -90,14 +90,30 @@ def main():
     )
 
     ac_mean = float(ac_costs.mean())
+    # Rollouts are seed-matched, so difference them for a paired CI on the gap.
+    diffs = rl_costs - ac_costs
+    se_pct = (
+        float(diffs.std(ddof=1) / np.sqrt(N) / ac_mean * 100.0)
+        if N > 1 and ac_mean != 0 else float("nan")
+    )
+    gap_pct = float(diffs.mean()) / ac_mean * 100.0 if ac_mean != 0 else None
+    lq_regime = params.sigma_profile == "constant" and params.sigma_noise_std == 0.0
     summary = {
         "episodes": int(N),
         "rl_cost_mean": float(rl_costs.mean()),
         "rl_cost_std": float(rl_costs.std()),
         "ac_cost_mean": ac_mean,
         "ac_cost_std": float(ac_costs.std()),
-        "is_gap_pct": float((rl_costs.mean() - ac_mean) / ac_mean * 100.0) if ac_mean != 0 else None,
+        "is_gap_pct": gap_pct,
+        "is_gap_pct_ci95": (
+            [gap_pct - 1.96 * se_pct, gap_pct + 1.96 * se_pct]
+            if gap_pct is not None and np.isfinite(se_pct) else None
+        ),
         "inv_l1_dev_mean": float(np.abs(rl_inv - ac_inv).mean()),
+        # Constant-sigma closed form; NOT comparable to rollout costs under
+        # time-varying/noisy sigma configs (it lands ~30% low on phase2_vol).
+        "ac_analytic_constant_sigma": float(analytic),
+        "ac_analytic_comparable": bool(lq_regime),
     }
     with open(out_dir / "summary.yaml", "w") as f:
         yaml.safe_dump(summary, f, sort_keys=False)

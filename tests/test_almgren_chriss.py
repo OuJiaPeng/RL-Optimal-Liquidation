@@ -10,6 +10,10 @@ from rl_optimal_liquidation.baselines.almgren_chriss import (
     ac_schedule,
     kappa,
 )
+from rl_optimal_liquidation.baselines.exact_lq import (
+    cost_of_trades,
+    exact_optimal_trades,
+)
 from rl_optimal_liquidation.diagnostics import ac_policy_fn, episode_cost, rollout
 from rl_optimal_liquidation.envs import LiquidationEnv, LiquidationParams
 
@@ -38,6 +42,18 @@ def test_kappa_formula():
     assert kappa(lam=4.0, sigma=1.0, eta=1.0) == pytest.approx(2.0)
 
 
+def test_exact_lq_soft_terminal_residual():
+    # The exact tridiagonal optimum must sit -0.094% below the hard-liquidation
+    # AC closed form at Phase 1 params: the documented direct-opt residual is
+    # the soft terminal penalty (optimal leftover q_N = q_{N-1}*c_a/(c_a+M)),
+    # not optimizer noise.
+    p = LiquidationParams()
+    path = np.full(p.N, p.sigma)
+    exact = cost_of_trades(exact_optimal_trades(p, path), p, path)
+    ac = ac_expected_cost(p.Q, p.T, p.N, p.lam, p.sigma, p.eta, p.gamma)
+    assert (exact - ac) / ac * 100.0 == pytest.approx(-0.0943, abs=0.002)
+
+
 def test_env_with_ac_policy_finishes_at_zero_inventory():
     # Deterministic env (sigma = 0) so the AC open-loop policy is exact.
     params = LiquidationParams(
@@ -49,18 +65,19 @@ def test_env_with_ac_policy_finishes_at_zero_inventory():
     assert out["inventory"][-1] == pytest.approx(0.0, abs=1.0)
 
 
-def test_env_ac_cost_matches_analytical_when_sigma_zero():
-    # No price noise, no terminal penalty => env cost == analytical AC cost.
+@pytest.mark.parametrize("sigma", [0.0, 0.3])
+def test_env_ac_cost_matches_analytical(sigma):
+    # Episode cost is deterministic given the schedule — price noise never
+    # enters the reward — so the sigma=0.3 case pins the full per-step formula
+    # including the lam*sigma^2*q^2*dt risk term, not just the impact terms.
     params = LiquidationParams(
-        Q=1e6, T=1.0, N=50, S0=100.0, mu=0.0, sigma=0.0,
+        Q=1e6, T=1.0, N=50, S0=100.0, mu=0.0, sigma=sigma,
         eta=1e-6, gamma=1e-7, lam=1e-6, terminal_penalty=0.0,
     )
     env = LiquidationEnv(params, seed=0)
     out = rollout(env, ac_policy_fn(env))
     env_cost = episode_cost(out["rewards"])
 
-    # With sigma=0 the inventory-penalty term in the cost is zero too, so the
-    # analytical-cost call uses the env's stated sigma. They should agree.
     analytic = ac_expected_cost(
         params.Q, params.T, params.N,
         params.lam, params.sigma, params.eta, params.gamma,

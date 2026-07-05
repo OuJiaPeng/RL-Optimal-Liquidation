@@ -54,6 +54,7 @@ class ACBaselineCallback(BaseCallback):
         # is equivalent to lowest gap because AC cost is constant.
         self.best_cost = float("inf")
         self.best_gap_at_best = float("nan")
+        self._next_eval = eval_freq
 
     def _init_callback(self) -> None:
         # Start each training run with a fresh CSV and reset best-tracking.
@@ -63,9 +64,15 @@ class ACBaselineCallback(BaseCallback):
                 csv.DictWriter(f, fieldnames=self.CSV_FIELDS).writeheader()
         self.best_cost = float("inf")
         self.best_gap_at_best = float("nan")
+        self._next_eval = self.eval_freq
 
     def _on_step(self) -> bool:
-        if self.n_calls % self.eval_freq == 0:
+        # Gate on num_timesteps, not n_calls: SB3 increments n_calls once per
+        # VecEnv step while num_timesteps advances by n_envs, so an n_calls
+        # gate would evaluate every eval_freq * n_envs timesteps.
+        if self.num_timesteps >= self._next_eval:
+            while self._next_eval <= self.num_timesteps:
+                self._next_eval += self.eval_freq
             self._evaluate()
         return True
 

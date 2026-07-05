@@ -1,0 +1,42 @@
+# Phase 1b — recover AC at kappa*T = 3 (2026-07-03 retrain batch).
+#
+# The original Phase 1 ran at lam=1e-6 (kappa*T = 0.3), where AC beats TWAP by
+# only 0.017% — so "within 2.84% of AC" cannot distinguish "recovered AC's
+# risk-adjusted shape" from "learned any reasonable schedule". At lam=1e-4
+# (kappa*T = 3) schedule shape is worth ~7.7%, making AC recovery a
+# discriminating claim. Constant sigma, no vol obs: pure Phase 1 setup.
+
+env:
+  Q: 1.0e+6
+  T: 1.0
+  N: 50
+  S0: 100.0
+  mu: 0.0
+  sigma: 0.3
+  eta: 1.0e-6
+  gamma: 1.0e-7
+  lam: 1.0e-4              # kappa*T = 3.0 — schedule shape is worth ~7.7% here
+  terminal_penalty: 1.0e-3
+  include_price_obs: false
+  include_vol_obs: false
+  sigma_profile: constant
+  sigma_amplitude: 0.0
+  sigma_noise_std: 0.0
+
+n_envs: 8
+
+ppo:
+  policy: beta
+  device: cpu
+  learning_rate: 1.0e-4    # Phase 2's tighter LR: same kappa*T regime, same reward scale
+  lr_schedule: constant
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 10
+  gamma: 1.0
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.25
+  target_kl: 0.03

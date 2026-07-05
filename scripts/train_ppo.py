@@ -13,17 +13,21 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from rl_optimal_liquidation.callbacks import ACBaselineCallback
 from rl_optimal_liquidation.envs import LiquidationEnv, LiquidationParams
 from rl_optimal_liquidation.policies import BetaActorCriticPolicy
+from rl_optimal_liquidation.wrappers import ControlVariateReward
 
 
-def make_env_thunk(env_cfg: dict):
+def make_env_thunk(env_cfg: dict, control_variate: str | None = None):
     def thunk():
-        return Monitor(LiquidationEnv(LiquidationParams(**env_cfg)))
+        env = LiquidationEnv(LiquidationParams(**env_cfg))
+        if control_variate:
+            env = ControlVariateReward(env, mode=control_variate)
+        return Monitor(env)
     return thunk
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="configs/default.yaml")
+    ap.add_argument("--config", default="configs/phase1.yaml")
     ap.add_argument("--total-timesteps", type=int, default=1_000_000,
                     help="1M is the stabilized Beta-policy baseline; 500k is enough"
                          " for Gaussian but Beta needs the extra time to converge.")
@@ -33,6 +37,8 @@ def main():
                     help="Steps between AC-baseline evaluations")
     ap.add_argument("--eval-episodes", type=int, default=20,
                     help="Episodes per AC-baseline evaluation")
+    ap.add_argument("--no-progress-bar", action="store_true",
+                    help="Disable the tqdm/rich progress bar (for logged batch runs)")
     args = ap.parse_args()
 
     with open(args.config) as f:
@@ -42,7 +48,12 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_envs = int(cfg.get("n_envs", 4))
-    env = DummyVecEnv([make_env_thunk(cfg["env"]) for _ in range(n_envs)])
+    # Optional training-time control variate: reward becomes -(cost - classical
+    # reference cost) for the same scenario. Pure variance reduction — the
+    # reference never depends on the agent's actions, so the optimum is
+    # unchanged. Eval (callback / evaluate.py) always uses raw-cost envs.
+    control_variate = cfg.get("control_variate")
+    env = DummyVecEnv([make_env_thunk(cfg["env"], control_variate) for _ in range(n_envs)])
 
     # Rewards in this env are O(1e6)-O(1e9) which swamps the value head.
     # VecNormalize tracks a running std of returns and rescales rewards to ~O(1),
@@ -119,7 +130,7 @@ def main():
     model.learn(
         total_timesteps=args.total_timesteps,
         callback=callback,
-        progress_bar=True,
+        progress_bar=not args.no_progress_bar,
     )
     model.save(out_dir / "model")
     env.save(str(out_dir / "vec_normalize.pkl"))

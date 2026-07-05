@@ -68,13 +68,26 @@ def episode_cost(rewards: np.ndarray) -> float:
     return float(-rewards.sum())
 
 
-def mean_cost(
+def episode_costs_over_seeds(
     env: LiquidationEnv, policy_fn: PolicyFn, episodes: int, seed: int = 0
-) -> tuple[float, float]:
-    """Mean and std of episode cost over `episodes` Monte Carlo rollouts."""
+) -> np.ndarray:
+    """Per-episode costs over `episodes` seeded rollouts (seed+i for episode i).
+
+    Two policies evaluated with the same (env, episodes, seed) see identical
+    noise realizations, so their cost arrays are paired — difference them for
+    matched-pair statistics instead of comparing marginal means.
+    """
     costs = np.empty(episodes)
     for i in range(episodes):
         env.reset(seed=seed + i)
         out = rollout(env, policy_fn, deterministic=True)
         costs[i] = episode_cost(out["rewards"])
+    return costs
+
+
+def mean_cost(
+    env: LiquidationEnv, policy_fn: PolicyFn, episodes: int, seed: int = 0
+) -> tuple[float, float]:
+    """Mean and std of episode cost over `episodes` Monte Carlo rollouts."""
+    costs = episode_costs_over_seeds(env, policy_fn, episodes, seed=seed)
     return float(costs.mean()), float(costs.std())

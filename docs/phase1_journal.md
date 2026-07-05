@@ -572,7 +572,70 @@ actually contains, not by horizon or architecture.
 
 ## Settled configs (final state)
 
-The shipped Phase configs are `configs/phase1.yaml` (Phase 1; `configs/default.yaml`
-holds the same baseline) and `configs/phase2_vol.yaml`. Each is documented inline and
+The shipped Phase configs are `configs/phase1.yaml` and `configs/phase1_kt3.yaml` (Phase 1)
+and `configs/phase2_vol_gaussian.yaml` (the featured Phase 2 run; `phase2_vol.yaml` and
+`phase2_vol_cv.yaml` are the Beta and control-variate arms). Each is documented inline and
 reproduces its result with a 5-seed `python scripts/train_ppo.py --config <file>` sweep.
-The `configs/phase1_anneal*.yaml` variants reproduce the LR-anneal experiments above.
+The LR-anneal experiment configs now live in `archive/superseded/phase1_anneal*.yaml`.
+
+# Addendum (2026-07-03) — audit corrections and the exact baseline ladder
+
+A code audit found measurement bugs and a missing-baseline gap; all are fixed in this commit.
+
+1. **`--eval-freq` was off by a factor of n_envs.** The callback gated on `n_calls`, which SB3
+   increments once per *VecEnv* step while `num_timesteps` advances by n_envs. With the shipped
+   `n_envs: 8`, every run evaluated and save-bested every **80k** timesteps, not the documented
+   10k (the committed `ac_eval.csv` rows confirm it). Now gated on `num_timesteps`.
+2. **Beta `mode()` NaN guard.** For raw params ≤ ~−17, float32 softplus underflows to α=β=1
+   exactly and the mode is 0/0 = NaN, which `np.clip` passes into the env on every
+   deterministic-eval path. `mode()` now falls back to the mean when the denominator vanishes.
+3. **The −0.094% direct-opt residual is structural, not optimizer noise.** With the *soft*
+   terminal penalty M=1e-3, the true optimum leaves q_N = q_{N−1}·c_a/(c_a+M) ≈ 4.8% of the last
+   step's inventory. An exact tridiagonal solve of the quadratic objective reproduces −0.0943%
+   vs the hard-liquidation AC closed form. Phase 1's "direct-opt reproduces AC" story is intact —
+   the residual now has its reason.
+4. **"RL ties CE-AC" was never measured — and is false.** `scripts/eval_phase2_baselines.py`
+   prices the full classical ladder *exactly* on matched scenarios (paired 95% CIs, 400
+   episodes): naive AC 0 · smart-static (profile + noise-distribution knowledge, zero
+   conditioning) **−1.33%** · CE-AC **−4.66%** (σ̂₀ reveals the episode scale, so CE-AC = the
+   per-episode oracle) · RL mean of 5 seeds **−0.74%** (−1.22% on the original eval seeds — mild
+   save-best selection optimism). The mean agent captures ~16% of the CE-AC edge and is **0.60%
+   [0.43, 0.78] worse than the best static schedule**; seeds 3–4 (−1.50%, −2.96%) do clear the
+   static bar. Corrected Phase 2 line: **RL beats only naive AC; it does not tie CE-AC, and on
+   average does not clear even the smart static baseline.** The earlier "value of conditioning =
+   3.79%" also conflated profile knowledge (capturable with zero conditioning) with genuine
+   per-episode conditioning; the ladder decomposes it (1.33pp + 3.32pp).
+5. **Smaller corrections.** The conditioning probe grid is 30 cells (6×5), not "30×30"; the
+   matched-pair oracle gap at noise=0.15 is 1.98% (a stale 5.10% figure sat in the probe
+   docstring); `pyproject.toml` now declares tqdm/rich (`progress_bar=True` crashed fresh
+   installs); the env-vs-analytic cost test now also runs at σ=0.3, pinning the risk term the
+   σ=0-only version never touched; `evaluate.py`/`diagnose.py` report paired 95% CIs and flag
+   the constant-σ analytic anchor as non-comparable under Phase 2 configs (it sits ~29% low
+   there); bool params in `LiquidationParams` now parse YAML strings ("false" was truthy).
+
+# Addendum (2026-07-04) — the retrain batch: Gaussian inverts Beta, RL clears the static bar
+
+Retrained everything under the corrected protocol (18 runs: 5 Beta, 5 Beta+control-variate,
+5 Gaussian, 3 Phase-1b), all scored on the exact ladder with matched scenarios:
+
+1. **The featured result.** Gaussian policy, 5/5 seeds: **−3.41%** [−3.93, −2.89] vs naive AC
+   (range −3.03…−3.70), beating smart-static (−1.33%) by 2.1pp on every seed and capturing ~73%
+   of the CE-AC ceiling (−4.66%). Conditioning verified causally: action monotone in σ̂ on 26–30
+   of 30 grid cells per seed; OOD profile rollouts track σ̂, not the clock.
+2. **The Beta-vs-Gaussian inversion.** The journal's earlier "clipped Gaussian capped at 5–9%,
+   Beta closed it" was a Phase 1 (κT=0.3) result that did not transfer: in the Phase 2 regime
+   Beta is bimodal (2/5 seeds discover conditioning; retrain mean −0.83%), Gaussian is uniform
+   (5/5). Hypothesis: SB3's Gaussian shares one state-independent log-σ so exploration survives
+   everywhere; Beta's state-dependent concentration sharpens prematurely and can kill σ̂
+   exploration before discovery. Lesson: distribution choice is regime-dependent — re-measure
+   inherited claims.
+3. **Control variate: hypothesis half-right.** Subtracting the per-scenario CE cost from the
+   reward (returns ≈ regret) deepens capture when discovery happens (best −3.65%) but does not
+   raise the discovery rate (2/5) — the binding constraint is exploration, not gradient variance.
+4. **Phase 1b (κT=3, `configs/phase1_kt3.yaml`).** Beta recovers AC to +0.26–0.36% (3 seeds) in
+   the regime where shape is worth 7.7% — the discriminating version of the Phase 1 claim.
+5. **Phase 3 sqrt-impact direction measured dead.** Best-LQ-family vs true square-root-impact
+   optimum: ≤0.85% across participation sizes 0.25×–64× (peak ~4×, converging again as risk
+   dominance front-loads both families) and ~0.70% under stochastic liquidity correlated with
+   vol. Below RL's own imprecision — no honest crossover available there. Superseded tools moved
+   to `archive/superseded/`.

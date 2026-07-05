@@ -1,0 +1,46 @@
+# Phase 2 vol-conditioning + control-variate reward (2026-07-03 retrain batch).
+#
+# Identical env/PPO to phase2_vol.yaml; the one change is control_variate: ce —
+# training reward becomes -(cost - CE-schedule cost) for the episode's realized
+# sigma path. The reference never depends on the agent's actions, so the optimal
+# policy is unchanged; returns become regret-vs-CE, collapsing the cross-scenario
+# variance that dominates PPO's gradient noise. Hypothesis: this closes part of
+# the gap between RL (-0.74% vs naive AC, mean of 5 seeds under the old protocol)
+# and CE-AC (-4.66%). Eval callbacks always score on raw cost.
+
+control_variate: ce
+
+env:
+  Q: 1.0e+6
+  T: 1.0
+  N: 50
+  S0: 100.0
+  mu: 0.0
+  sigma: 0.3
+  eta: 1.0e-6
+  gamma: 1.0e-7
+  lam: 1.0e-4              # kappa*T = 3.0 — schedule structure matters
+  terminal_penalty: 1.0e-3
+  include_price_obs: false
+  include_vol_obs: true    # sigma_hat / sigma_0 in obs
+  sigma_profile: u_shaped
+  sigma_amplitude: 0.5
+  sigma_noise_std: 0.3     # per-episode multiplicative scale
+
+n_envs: 8
+
+ppo:
+  policy: beta
+  device: cpu
+  learning_rate: 1.0e-4
+  lr_schedule: constant
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 10
+  gamma: 1.0
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.25
+  target_kl: 0.03

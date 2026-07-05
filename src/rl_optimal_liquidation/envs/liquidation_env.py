@@ -43,14 +43,26 @@ class LiquidationParams:
         self.gamma = float(self.gamma)
         self.lam = float(self.lam)
         self.terminal_penalty = float(self.terminal_penalty)
-        self.include_price_obs = bool(self.include_price_obs)
-        self.include_vol_obs = bool(self.include_vol_obs)
+        # bool("false") is True, so string-typed YAML values need explicit parsing.
+        self.include_price_obs = self._coerce_bool(self.include_price_obs)
+        self.include_vol_obs = self._coerce_bool(self.include_vol_obs)
         self.sigma_amplitude = float(self.sigma_amplitude)
         self.sigma_noise_std = float(self.sigma_noise_std)
         if self.sigma_profile not in ("constant", "u_shaped"):
             raise ValueError(
                 f"sigma_profile must be 'constant' or 'u_shaped', got {self.sigma_profile!r}"
             )
+
+    @staticmethod
+    def _coerce_bool(v) -> bool:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("true", "1", "yes", "on"):
+                return True
+            if s in ("false", "0", "no", "off"):
+                return False
+            raise ValueError(f"cannot interpret {v!r} as a bool")
+        return bool(v)
 
     def dt(self) -> float:
         return self.T / self.N

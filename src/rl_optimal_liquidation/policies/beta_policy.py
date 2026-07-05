@@ -76,7 +76,13 @@ class BetaDistribution(Distribution):
     def mode(self) -> th.Tensor:
         alpha = self.distribution.concentration1
         beta = self.distribution.concentration0
-        return (alpha - 1.0) / (alpha + beta - 2.0)
+        # For raw params <= ~-17, float32 softplus underflows and alpha = beta
+        # = 1.0 exactly (uniform), making the mode 0/0 = NaN — which np.clip
+        # passes straight into the env on every deterministic-eval path. Fall
+        # back to the mean when the denominator vanishes.
+        denom = alpha + beta - 2.0
+        safe_mode = (alpha - 1.0) / th.clamp(denom, min=1e-6)
+        return th.where(denom > 1e-6, safe_mode, alpha / (alpha + beta))
 
     def actions_from_params(
         self, raw_params: th.Tensor, deterministic: bool = False

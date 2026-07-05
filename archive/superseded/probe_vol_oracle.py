@@ -1,12 +1,15 @@
 """Vol-conditioning oracle diagnostic (matched-pair).
 
-Closes the methodology gap on the Phase 2 vol result. We ran direct-opt at
-noise=0.15 (gap = 5.10% — informed the noise bump to 0.3) but never recomputed
-the oracle at the noise=0.3 setup that ultimately worked. This script does
+Closes the methodology gap on the Phase 2 vol result. The matched-pair oracle
+gap at noise=0.15 is 1.98% (too small for PPO to capture — which informed the
+bump to 0.3); this script recomputes the oracle at any noise level. It does
 matched-pair MC: same per-episode sigma_scale draws, compute (1) oracle =
 direct-opt knowing the scale, (2) AC schedule cost.
 
 Gap (AC - oracle) / AC = maximum value of vol-conditioning at that noise level.
+NOTE: the "AC" baseline here is the NAIVE constant-sigma AC schedule — see
+scripts/eval_phase2_baselines.py for the smart-static and CE-AC baselines that
+decompose this gap into profile knowledge vs genuine per-episode conditioning.
 """
 from __future__ import annotations
 
