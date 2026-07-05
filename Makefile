@@ -1,7 +1,7 @@
 # RL Optimal Liquidation — convenience targets.
 # Each train target runs a single seed; for multi-seed sweeps see scripts/.
 
-.PHONY: install test phase1 phase2-vol diagnose ladder clean help
+.PHONY: install test phase1 phase1-kt3 phase2-vol diagnose ladder clean help
 
 SEED ?= 0
 
@@ -10,8 +10,9 @@ help:
 	@echo "  install         pip install -e .[dev]"
 	@echo "  test            run the test suite"
 	@echo "  phase1          train Phase 1 (linear-impact AC validation)        ~5 min"
+	@echo "  phase1-kt3      train Phase 1 in the discriminating kT=3 regime    ~5 min"
 	@echo "  phase2-vol      train Phase 2 vol-conditioning (positive result)   ~5 min"
-	@echo "  diagnose        run diagnose.py on the most-recent phase1 model"
+	@echo "  diagnose        diagnose the phase1 run for SEED (default 0)"
 	@echo "  ladder          classical baseline ladder: naive AC / smart-static / CE-AC vs RL"
 	@echo "  clean           wipe runs/ (DESTRUCTIVE)"
 	@echo ""
@@ -26,6 +27,9 @@ test:
 phase1:
 	python scripts/train_ppo.py --config configs/phase1.yaml --seed $(SEED) --output runs/phase1_s$(SEED)
 
+phase1-kt3:
+	python scripts/train_ppo.py --config configs/phase1_kt3.yaml --seed $(SEED) --output runs/p1_kt3_s$(SEED)
+
 phase2-vol:
 	python scripts/train_ppo.py --config configs/phase2_vol_gaussian.yaml --seed $(SEED) --output runs/p2_gauss_s$(SEED)
 
@@ -34,7 +38,7 @@ diagnose:
 
 ladder:
 	@echo "--- Classical baseline ladder (phase2_vol) ---"
-	python scripts/eval_phase2_baselines.py
+	python scripts/eval_phase2_baselines.py --config configs/phase2_vol_gaussian.yaml --models "runs/p2_gauss_s*/best_model.zip"
 
 clean:
 	rm -rf runs/

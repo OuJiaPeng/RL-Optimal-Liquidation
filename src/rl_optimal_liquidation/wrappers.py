@@ -39,7 +39,7 @@ class ControlVariateReward(gym.Wrapper):
     def reset(self, *, seed=None, options=None):
         obs, info = self.env.reset(seed=seed, options=options)
         p = self.env.unwrapped.p
-        path = self.env.unwrapped._sigma_scale * self._profile
+        path = info["sigma_scale"] * self._profile
         trades = self._static if self.mode == "smart_static" else exact_optimal_trades(p, path)
         self._ref_costs = per_step_costs_of_trades(trades, p, path)
         self._k = 0

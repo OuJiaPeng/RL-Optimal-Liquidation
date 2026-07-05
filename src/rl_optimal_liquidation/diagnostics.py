@@ -79,6 +79,8 @@ def episode_costs_over_seeds(
     """
     costs = np.empty(episodes)
     for i in range(episodes):
+        # rollout() resets again unseeded; that second reset draws from the RNG
+        # just seeded here, identically for every policy, so scenarios pair.
         env.reset(seed=seed + i)
         out = rollout(env, policy_fn, deterministic=True)
         costs[i] = episode_cost(out["rewards"])

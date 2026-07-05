@@ -15,6 +15,11 @@ modes by sending α/(α+β) → 0 or 1 with α+β → ∞.
 Parameterization: the network outputs `2*action_dim` raw values per state.
 softplus + 1 maps each half to α, β ≥ 1, so the Beta is unimodal with mode
 `(α-1)/(α+β-2)` everywhere in [0, 1].
+
+Empirically the boundary bias matters most in Phase 1 (f_k → 1 at the terminal
+step), where Beta recovers AC cleanly. Phase 2 features the Gaussian instead:
+its state-independent log-std keeps exploration alive on a discovery-limited
+task (5/5 vs 2/5 seeds — see docs/PROJECT_STATUS.md, policy-family finding).
 """
 from __future__ import annotations
 

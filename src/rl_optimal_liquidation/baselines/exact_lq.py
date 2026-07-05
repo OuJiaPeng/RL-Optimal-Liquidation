@@ -40,6 +40,8 @@ def exact_optimal_trades(p: LiquidationParams, sigma_path: np.ndarray) -> np.nda
     c_a = p.eta / dt + p.gamma
     r = p.lam * np.asarray(sigma_path) ** 2 * dt  # r_0..r_{N-1}
 
+    # The system is tridiagonal; at N=50 a dense solve is exact and instant
+    # (scipy.linalg.solve_banded would be the O(N) route at scale).
     A = np.zeros((N, N))
     b = np.zeros(N)
     for j in range(1, N):        # unknowns q_1..q_{N-1} -> rows 0..N-2

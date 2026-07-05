@@ -38,7 +38,9 @@ ppo:
   gamma: 1.0
   gae_lambda: 0.95
   clip_range: 0.2
-  ent_coef: 0.0
+  ent_coef: 0.0            # exploration comes from the shared state-independent
+                           # log-std; an entropy bonus would distort the pure-cost
+                           # objective without addressing discovery
   vf_coef: 0.5
   max_grad_norm: 0.25
   target_kl: 0.03

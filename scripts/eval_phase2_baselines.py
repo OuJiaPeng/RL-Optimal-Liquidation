@@ -1,9 +1,9 @@
 """Phase 2 classical-baseline decomposition (matched-pair, exact schedules).
 
-The historical oracle probe (archive/superseded/probe_vol_oracle.py) measured
-"value of conditioning" as (naive AC - perfect-foresight oracle). That gap
-conflates two different kinds of knowledge, and this script separates them
-with two baselines the repo previously lacked:
+An earlier oracle probe measured "value of conditioning" as (naive AC -
+perfect-foresight oracle). That gap conflates two different kinds of
+knowledge, and this script separates them with two baselines the repo
+previously lacked:
 
   1. naive AC       — constant-sigma closed form, as deployed everywhere else.
   2. smart-static   — the best SINGLE schedule for a desk that knows the sigma
@@ -53,11 +53,9 @@ def rl_costs(model_path: Path, p: LiquidationParams, scales: np.ndarray, seed: i
     env = LiquidationEnv(p, seed=seed)
     costs = np.empty(len(scales))
     for i, s in enumerate(scales):
-        env.reset(seed=seed + i)
-        # Force the matched per-episode scale (params have noise 0, so reset
-        # left the scale at 1.0) and rebuild the initial observation with it.
-        env._sigma_scale = float(s)
-        obs = env._obs()
+        # Force the matched per-episode scale via the env's reset hook (params
+        # have noise 0, so an unforced reset would leave the scale at 1.0).
+        obs, _ = env.reset(seed=seed + i, options={"sigma_scale": float(s)})
         total, done = 0.0, False
         while not done:
             a, _ = model.predict(obs, deterministic=True)
@@ -92,12 +90,12 @@ def validate_exact_solver() -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="configs/phase2_vol.yaml")
+    ap.add_argument("--config", default="configs/phase2_vol_gaussian.yaml")
     ap.add_argument("--episodes", type=int, default=400)
     ap.add_argument("--seed", type=int, default=777,
                     help="Seed for the scale draws and RL rollouts; distinct from "
                          "the training-callback (1e6+) and evaluate.py (1e4+) seeds.")
-    ap.add_argument("--models", default="runs/phase2_n30_s*/best_model.zip",
+    ap.add_argument("--models", default="runs/p2_gauss_s*/best_model.zip",
                     help="Glob of trained checkpoints to include (empty matches skip RL).")
     args = ap.parse_args()
 
@@ -133,6 +131,9 @@ def main() -> None:
 
     # --- RL arms ---
     model_paths = sorted(Path(".").glob(args.models))
+    if not model_paths:
+        print(f"\n[warn] no checkpoints match {args.models!r} — the ladder below has "
+              f"classical arms only. Run `make phase2-vol` first or pass --models.")
     rl_by_model: dict[str, np.ndarray] = {}
     for mp in model_paths:
         name = mp.parent.name

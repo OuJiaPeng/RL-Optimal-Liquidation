@@ -93,6 +93,8 @@ class ACBaselineCallback(BaseCallback):
 
         for i in range(N):
             seed = self.seed_base + i
+            # rollout() resets again unseeded; that second reset draws from the
+            # RNG just seeded here, identically for both arms, so scenarios pair.
             env.reset(seed=seed)
             r = rollout(env, self._predict)
             rl_costs[i] = episode_cost(r["rewards"])

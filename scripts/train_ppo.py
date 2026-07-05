@@ -1,4 +1,4 @@
-"""Train PPO on the linear-impact liquidation env (Phase 1)."""
+"""Train PPO on the liquidation env (Phase 1 or Phase 2, selected via --config)."""
 from __future__ import annotations
 
 import argparse
@@ -55,11 +55,6 @@ def main():
     control_variate = cfg.get("control_variate")
     env = DummyVecEnv([make_env_thunk(cfg["env"], control_variate) for _ in range(n_envs)])
 
-    # Rewards in this env are O(1e6)-O(1e9) which swamps the value head.
-    # VecNormalize tracks a running std of returns and rescales rewards to ~O(1),
-    # so the value function can actually learn. The unwrapped env used by the
-    # callback / diagnose.py still reports true cost units, so AC comparisons
-    # remain in original cost dollars.
     ppo_kwargs = dict(cfg.get("ppo", {}))
 
     # Optional LR schedule: SB3 calls the callable with progress_remaining
@@ -95,6 +90,11 @@ def main():
     else:
         raise ValueError(f"unknown policy {policy_choice!r}; use 'gaussian' or 'beta'")
 
+    # Rewards in this env are O(1e6)-O(1e9), which swamps the value head.
+    # VecNormalize tracks a running std of returns and rescales rewards to ~O(1)
+    # so the value function can learn. norm_obs=False: the env already emits
+    # normalized features (k/N, q/Q, sigma_hat/sigma), so eval can run on raw
+    # envs and the callback / diagnose.py report true cost units.
     env = VecNormalize(
         env,
         norm_obs=False,

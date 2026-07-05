@@ -35,8 +35,8 @@ from rl_optimal_liquidation.policies import BetaActorCriticPolicy  # noqa: F401
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="runs/phase2_n30_s0/best_model.zip")
-    ap.add_argument("--config", default="configs/phase2_vol.yaml")
+    ap.add_argument("--model", default="runs/p2_gauss_s0/best_model.zip")
+    ap.add_argument("--config", default="configs/phase2_vol_gaussian.yaml")
     ap.add_argument("--output", default=None,
                     help="Plot path. Defaults to <model_dir>/diagnostics/vol_conditioning.png")
     ap.add_argument("--seed", type=int, default=42)
@@ -115,9 +115,8 @@ def main():
     # Inventory trajectories diverge MUCH more visibly than f_k because they
     # integrate the conditioning. This is where closed-loop control is most legible.
 
-    # Zoom the action plot to where the conditioning signal lives (early/mid),
-    # then break the y-axis or just use log if terminal hits 1.0. Simpler: clip
-    # the y-axis to [0, 0.15] which covers everything except the terminal spike.
+    # Clip the y-axis to [0, 0.16]: the conditioning signal lives early/mid-
+    # episode; the terminal f_k -> 1 spike is annotated off-scale below.
     ax_f.set_ylim(0, 0.16)
     ax_f.set_xlabel("step $k$")
     ax_f.set_ylabel(r"trading fraction $f_k$  (zoomed)")

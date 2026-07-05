@@ -17,7 +17,7 @@ from rl_optimal_liquidation.policies import BetaActorCriticPolicy  # noqa: F401
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/phase1.yaml")
-    ap.add_argument("--model", default="runs/phase1/best_model.zip",
+    ap.add_argument("--model", default="runs/phase1_s0/best_model.zip",
                     help="Defaults to best-gap checkpoint; pass model.zip for the final one.")
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--seed", type=int, default=10_000)
@@ -60,6 +60,9 @@ def main():
         return
 
     from stable_baselines3 import PPO
+    # vec_normalize.pkl is deliberately not loaded: training used norm_obs=False
+    # (obs are already dimensionless by construction), and reward normalization
+    # only shapes training gradients — eval costs stay in true cost units.
     model = PPO.load(str(model_path), device="cpu")
 
     def rl_fn(obs, deterministic=True):

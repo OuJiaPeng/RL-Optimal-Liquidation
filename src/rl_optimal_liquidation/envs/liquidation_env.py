@@ -21,7 +21,8 @@ class LiquidationParams:
     gamma: float = 1.0e-7         # permanent impact coefficient (g(v) = gamma * v)
     lam: float = 1.0e-6           # risk aversion lambda
     terminal_penalty: float = 1.0e-3  # M in -M * q_N^2
-    include_price_obs: bool = True    # add S/S0 to obs (irrelevant for LQ optimum)
+    include_price_obs: bool = False   # add S/S0 to obs (irrelevant for the LQ optimum,
+                                      # so off by default — every shipped config agrees)
     include_vol_obs: bool = False     # add sigma(t)/sigma to obs (informative when sigma_profile != constant)
     sigma_profile: str = "constant"   # "constant" or "u_shaped"
     sigma_amplitude: float = 0.0      # A in sigma(t) = sigma * (1 + A * cos(2 pi t / T)) for u_shaped
@@ -92,6 +93,10 @@ class LiquidationEnv(gym.Env):
     Action:   f_k in [0, 1], shares sold this step a_k = f_k * q_k
     Reward:   -(eta a_k^2 / dt  +  gamma a_k^2  +  lam sigma(t_k)^2 q_k^2 dt)
               with terminal penalty -M * q_N^2 if inventory remains at step N.
+
+    The reward is the per-step mean-variance (certainty-equivalent) cost — the
+    AC objective — not realized P&L. The simulated price path (and mu) feeds
+    only the optional price observation and diagnostics, never the reward.
     """
 
     metadata = {"render_modes": []}
@@ -130,7 +135,11 @@ class LiquidationEnv(gym.Env):
         self.k = 0
         self.q = self.p.Q
         self.S = self.p.S0
-        if self.p.sigma_noise_std > 0.0:
+        if options and "sigma_scale" in options:
+            # Matched-pair evaluation hook: force the per-episode scale instead
+            # of drawing it, so every arm prices the same scenario.
+            self._sigma_scale = float(options["sigma_scale"])
+        elif self.p.sigma_noise_std > 0.0:
             # Clamp to a small positive floor to avoid pathological near-zero sigma.
             self._sigma_scale = max(
                 1.0 + float(self._rng.normal(0.0, self.p.sigma_noise_std)), 0.1
@@ -163,6 +172,8 @@ class LiquidationEnv(gym.Env):
                        - perm_price_drop
 
         self.k += 1
+        # terminated, not truncated: the horizon is part of the MDP (terminal
+        # penalty at N), so value estimates must not bootstrap past the last step.
         terminated = self.k >= self.p.N
         if terminated and self.q > 0.0:
             reward -= self.p.terminal_penalty * (self.q ** 2)

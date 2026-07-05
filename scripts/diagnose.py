@@ -29,11 +29,11 @@ from rl_optimal_liquidation.policies import BetaActorCriticPolicy  # noqa: F401
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/phase1.yaml")
-    ap.add_argument("--model", default="runs/phase1/best_model.zip",
+    ap.add_argument("--model", default="runs/phase1_s0/best_model.zip",
                     help="Defaults to best-gap checkpoint; pass model.zip for the final one.")
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--seed", type=int, default=10_000)
-    ap.add_argument("--output", default="runs/phase1/diagnostics")
+    ap.add_argument("--output", default="runs/phase1_s0/diagnostics")
     args = ap.parse_args()
 
     out_dir = Path(args.output)
