@@ -15,7 +15,7 @@ here" counts as a result when it comes with a precise reason.
 
 ## The arc — what RL can recover
 
-Three phases:
+Two phases:
 
 1. **Recover.** Where AC is provably optimal, RL recovers it, which validates the pipeline as a
    sound measurement instrument.
@@ -24,8 +24,9 @@ Three phases:
    act), and the problem stays linear-quadratic, so CE-AC is the ceiling. RL learns genuine
    closed-loop conditioning: it beats every *static* classical schedule and captures ~73% of the
    CE-AC edge without reaching it.
-3. **Conclude.** Measure the exits from the LQ family instead of promising them. Every probed
-   escape route prices out below the agent's own optimization noise, so the boundary is the result.
+
+The boundary is where the arc stops, and that stopping point is itself the finding (see
+[Why it stops here](#why-it-stops-here)).
 
 ### Phase 1 — recover
 RL **recovers** the AC optimum in the linear-impact regime where AC is provably optimal. The
@@ -85,23 +86,24 @@ path buys a small, bounded edge and never a structural win. That is why the resu
 rather than a vol-specific quirk**: it is a property of certainty-equivalence in a quadratic
 objective, not of volatility.
 
-### Phase 3 — the boundary, measured (closed)
-The natural next question — *where does RL become necessary over the best classical method a desk
-would deploy?* — was probed rather than promised. The most credible exit from the LQ family is
-**impact-form misspecification**: real markets follow the square-root law (concave impact), a
-functional family no recalibration of a quadratic model can reach. Priced with zero-training
-exact solves before committing any RL to it: the best LQ-family schedule loses ≤ **0.85%** to the
-true concave-impact optimum across participation sizes 0.25×–64× and under stochastic liquidity
-co-moving with vol — below the agent's own optimization noise. No honest crossover exists there.
+### Why it stops here
+The project stops at two phases by design, and the reason isn't that RL "fails" outside the
+linear-quadratic family; it's that the same break which weakens the classical benchmark also
+weakens RL's ability to close the gap, so a wider fight doesn't hand RL a cleaner win.
 
-The structural reason generalizes. As long as the objective stays quadratic and uncertainty enters
-through estimable parameters, certainty-equivalence is near-optimal and every fight is thin. The
-problems where RL *would* be necessary (nonlinear transient impact, multi-asset nonlinear,
-order-book queues) are exactly the ones where no exact benchmark exists to referee the claim. The
-model-free zone begins where the honest benchmark ends, and that boundary is the project's final
-result rather than its unfinished business. (Earlier exploratory chapters, including spreads,
-regimes, cross-impact, arrivals, and CVaR, live under `archive/`, each with its own README. They
-informed this framing, but the claims above rest only on what the active tree measures.)
+Two things are already visible in the Phase 2 numbers. First, RL's own imprecision is real: it
+captures ~73% of the CE-AC edge, not all of it, so roughly a quarter of a 4.66% opportunity
+(about 1.25pp) is left on the table by the optimizer, not by the problem. That gap is PPO's noise
+floor, and nothing about leaving the LQ family shrinks it; nonlinear cost surfaces make value
+estimation noisier and credit assignment harder, so the floor likely grows. Second, leaving the
+family removes the exact benchmark (naive AC, smart-static, CE-AC) that makes every number above
+verifiable rather than asserted. Break AC enough to make RL *necessary*, and both the referee and
+the agent's precision degrade together: the extra opportunity a harder problem opens up has to
+clear a wider noise floor, on a court with no lines.
+
+That is the reasoned stopping point, not an unexplored one. (Earlier exploratory chapters,
+including spreads, regimes, cross-impact, arrivals, and CVaR, live under `archive/`, each with its
+own README.)
 
 ## Why this is a conclusion, not abandonment
 
@@ -119,9 +121,9 @@ credible.
 No "RL beats AC" unqualified, anywhere. Frame as **"measuring when adaptive RL does and doesn't
 add value over AC, and why."** The Phase-2 line is **CE-AC > RL > smart-static > naive AC**: the
 agent beats every static classical schedule and captures ~73% of the certainty-equivalence
-ceiling, it does not beat CE-AC, and in this family nothing can. Phase 3 is **closed as a measured
-boundary** rather than open, because every probed exit from the LQ family prices out below the
-agent's own imprecision. State it that way, not as "future work."
+ceiling, it does not beat CE-AC, and in this family nothing can. The project stops at two phases
+because leaving the linear-quadratic family means leaving the regime where an exact benchmark
+exists. State the boundary as the finding, not as "future work."
 
 ## Out of scope (this release)
 

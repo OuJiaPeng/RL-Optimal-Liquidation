@@ -634,8 +634,9 @@ Retrained everything under the corrected protocol (18 runs: 5 Beta, 5 Beta+contr
    raise the discovery rate (2/5) — the binding constraint is exploration, not gradient variance.
 4. **Phase 1b (κT=3, `configs/phase1_kt3.yaml`).** Beta recovers AC to +0.26–0.36% (3 seeds) in
    the regime where shape is worth 7.7% — the discriminating version of the Phase 1 claim.
-5. **Phase 3 sqrt-impact direction measured dead.** Best-LQ-family vs true square-root-impact
-   optimum: ≤0.85% across participation sizes 0.25×–64× (peak ~4×, converging again as risk
-   dominance front-loads both families) and ~0.70% under stochastic liquidity correlated with
-   vol. Below RL's own imprecision — no honest crossover available there. Superseded tools moved
-   to `archive/superseded/`.
+5. **Why we stopped at two phases (exploratory check, code not committed).** Before opening a
+   third phase, a quick zero-training calculation compared the best LQ-family schedule to the true
+   square-root-impact optimum: the gap stayed ≤0.85% across participation sizes 0.25×–64× and
+   ~0.70% under stochastic liquidity, below RL's own imprecision. That was enough to conclude the
+   reproducible exits from the LQ family are all thin, so the project ends at the measured Phase 2
+   boundary rather than a third phase. Superseded tools moved to `archive/superseded/`.

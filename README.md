@@ -8,7 +8,7 @@ Almgren–Chriss (1999) in the linear regime where AC is *provably optimal*, the
 that AC's fixed schedule goes stale, and tests whether the agent learns closed-loop control that
 keeps up with the adaptive classical method.
 
-> **Single source of truth for full status, the three-phase arc, and the certainty-equivalence finding: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).**
+> **Single source of truth for full status, the two-phase arc, and the certainty-equivalence finding: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).**
 
 This execution module takes positions determined by an upstream allocator (see
 [RL-Portfolio-Optimization](https://github.com/OuJiaPeng/RL-Portfolio-Optimization)) and
@@ -22,9 +22,14 @@ serve as the σ̂ input to the Phase 2 vol-conditional policy.
 |---|---|
 | **Phase 1** &nbsp;·&nbsp; recover (linear impact, AC provably optimal) | RL **recovers** AC to **+0.26–0.36%** at κT=3 (3 seeds), the regime where schedule shape is worth 7.7%, so the recovery discriminates. (The original flat-regime result was 2.84% mean over 5 seeds.) The −0.094% direct-opt residual is exactly the soft-terminal-penalty optimum, reproduced by an exact solver, which confirms the environment math. |
 | **Phase 2** &nbsp;·&nbsp; degrade one input (the **certainty-equivalence ceiling**) | RL (Gaussian policy, **5/5 seeds**) beats every static classical schedule by **2.1pp** and captures **~73%** of the CE-AC ceiling. It happens because time-varying σ makes AC's *fixed* schedule stale, and an exact classical ladder prices each rung on matched scenarios (paired 95% CIs; cost gaps vs naive AC): **naive AC 0 · smart-static −1.33% · RL −3.41% [−3.93, −2.89] · CE-AC −4.66%**. The conditioning is verified causally: the action is monotone in σ̂ on 26–30 of 30 (k, q) grid cells on every seed. |
-| **Phase 3** &nbsp;·&nbsp; the boundary, measured (closed) | Every measured exit from the LQ family prices out below the agent's own optimization noise. The most credible one, square-root (concave) impact, is a functional error no recalibration can fix, yet it costs the best misspecified classical schedule only ≤**0.85%** at every participation size and under stochastic liquidity (zero-training exact solves). The model-free zone begins where the honest benchmark ends, and that boundary is the final result. |
 
-Mechanism and the full finding: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
+The arc stops at two phases by design. Staying in the linear-quadratic family, RL can at best tie
+the smart classical method, and making RL *necessary* means leaving that family. But the same break
+that weakens the classical benchmark also removes the exact ladder that makes RL's gain verifiable,
+and it doesn't shrink RL's own noise floor either: the agent already leaves ~27% of the CE-AC edge
+on the table (about 1.25pp) inside the one regime where everything is still exact. A harder problem
+has to clear a wider floor with no referee to prove it did. The boundary is the finding. Mechanism
+and the full result: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ![Vol-conditioning probe](docs/figures/vol_conditioning.png)
 
