@@ -42,6 +42,21 @@ def test_kappa_formula():
     assert kappa(lam=4.0, sigma=1.0, eta=1.0) == pytest.approx(2.0)
 
 
+def test_kt3_is_discriminating_regime():
+    # Pins the "why phase1_kt3" claim in the docs: at kappa*T=0.3 the optimal
+    # schedule is nearly flat, so naive TWAP (uniform shares) is within ~0.02%
+    # of AC and the acceptance band cannot tell "recovered AC" from "learned
+    # anything reasonable". At kappa*T=3 the optimum front-loads, so TWAP is
+    # ~32% worse and landing near AC is a meaningful test.
+    for lam, expected_gap_pct in [(1e-6, 0.017), (1e-4, 31.6)]:
+        p = LiquidationParams(lam=lam)  # constant sigma
+        path = np.full(p.N, p.sigma)
+        ac = ac_expected_cost(p.Q, p.T, p.N, p.lam, p.sigma, p.eta, p.gamma)
+        twap = cost_of_trades(np.full(p.N, p.Q / p.N), p, path)  # uniform shares
+        gap_pct = (twap - ac) / ac * 100.0
+        assert gap_pct == pytest.approx(expected_gap_pct, rel=0.05)
+
+
 def test_exact_lq_soft_terminal_residual():
     # The exact tridiagonal optimum must sit -0.094% below the hard-liquidation
     # AC closed form at Phase 1 params: the documented direct-opt residual is

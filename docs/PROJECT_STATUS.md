@@ -31,9 +31,9 @@ The boundary is where the arc stops, and that stopping point is itself the findi
 ### Phase 1 — recover
 RL **recovers** the AC optimum in the linear-impact regime where AC is provably optimal. The
 best-validated checkpoint lands **~2.84% mean** from AC (5 seeds, range 1.26–4.37%), and the
-recovery holds where it discriminates: at κT=3 (λ=1e-4), where schedule shape is worth 7.7% versus
-0.017% in the original κT=0.3 regime, retrained agents land **+0.26–0.36% from AC** (3 seeds,
-`configs/phase1_kt3.yaml`).
+recovery holds where it discriminates: at κT=3 (λ=1e-4), AC undercuts naive TWAP by ~32% (versus
+only 0.017% in the original κT=0.3 regime, where any schedule is nearly as good as AC), and
+retrained agents still land **+0.26–0.36% from AC** (3 seeds, `configs/phase1_kt3.yaml`).
 
 Two structural caveats keep the numbers honest. Final-of-training models do **not** reliably
 converge, a **terminal-penalty cliff** reconfirmed on the 2026-07 retrains (κT=3 finals +0.6%,
@@ -139,8 +139,8 @@ analytic AC + exact tridiagonal schedule solver + 50-parameter direct-opt (env v
 smart-static / CE-AC on matched scenarios with paired CIs (`scripts/eval_phase2_baselines.py`;
 the CE-AC rung doubles as the per-realization value-of-conditioning oracle) · state-space
 sensitivity-probe grid (`scripts/probe_conditioning_grid.py`) · 5-seed protocol diagnosing
-**best AND final** · regression suite (14 tests) pinning the AC formulas, the exact solver, and
-env-vs-analytic cost equivalence.
+**best AND final** · regression suite (15 tests) pinning the AC formulas, the exact solver,
+env-vs-analytic cost equivalence, and the κT-regime discrimination gap.
 
 ## Reading order
 

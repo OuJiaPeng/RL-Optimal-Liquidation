@@ -632,8 +632,11 @@ Retrained everything under the corrected protocol (18 runs: 5 Beta, 5 Beta+contr
 3. **Control variate: hypothesis half-right.** Subtracting the per-scenario CE cost from the
    reward (returns ≈ regret) deepens capture when discovery happens (best −3.65%) but does not
    raise the discovery rate (2/5) — the binding constraint is exploration, not gradient variance.
-4. **Phase 1b (κT=3, `configs/phase1_kt3.yaml`).** Beta recovers AC to +0.26–0.36% (3 seeds) in
-   the regime where shape is worth 7.7% — the discriminating version of the Phase 1 claim.
+4. **Phase 1b (κT=3, `configs/phase1_kt3.yaml`).** Beta recovers AC to +0.26–0.36% (3 seeds) in a
+   discriminating regime: under this config's constant σ, AC undercuts naive TWAP by ~32% (versus
+   0.017% at κT=0.3), so landing near AC is meaningful. (The "7.7%" in the §2.1 κT-sweep table
+   above is a different quantity — best constant *fraction* vs the full optimal schedule, computed
+   in that section's cost-inflated setup — not the constant-σ AC-vs-TWAP gap used here.)
 5. **Why we stopped at two phases (exploratory check, code not committed).** Before opening a
    third phase, a quick zero-training calculation compared the best LQ-family schedule to the true
    square-root-impact optimum: the gap stayed ≤0.85% across participation sizes 0.25×–64× and

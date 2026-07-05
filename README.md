@@ -4,23 +4,17 @@
 
 A reinforcement-learning framework for optimal trade execution. The agent liquidates `Q` shares over
 horizon `[0, T]` while minimizing market impact plus inventory risk. It validates against
-Almgren–Chriss (1999) in the linear regime where AC is *provably optimal*, then changes one input so
+Almgren–Chriss (2001) in the linear regime where AC is *provably optimal*, then changes one input so
 that AC's fixed schedule goes stale, and tests whether the agent learns closed-loop control that
 keeps up with the adaptive classical method.
 
 > **Single source of truth for full status, the two-phase arc, and the certainty-equivalence finding: [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).**
 
-This execution module takes positions determined by an upstream allocator (see
-[RL-Portfolio-Optimization](https://github.com/OuJiaPeng/RL-Portfolio-Optimization)) and
-liquidates them under real-time market conditions. Volatility forecasts from
-[DL-Volatility-Forecasting](https://github.com/OuJiaPeng/DL-Volatility-Forecasting) can
-serve as the σ̂ input to the Phase 2 vol-conditional policy.
-
 ## Results
 
 | Phase | Result |
 |---|---|
-| **Phase 1** &nbsp;·&nbsp; recover (linear impact, AC provably optimal) | RL **recovers** AC to **+0.26–0.36%** at κT=3 (3 seeds), the regime where schedule shape is worth 7.7%, so the recovery discriminates. (The original flat-regime result was 2.84% mean over 5 seeds.) The −0.094% direct-opt residual is exactly the soft-terminal-penalty optimum, reproduced by an exact solver, which confirms the environment math. |
+| **Phase 1** &nbsp;·&nbsp; recover (linear impact, AC provably optimal) | RL **recovers** AC to **+0.26–0.36%** at κT=3 (3 seeds), a regime that discriminates: there AC undercuts naive TWAP by **~32%**, versus only 0.017% at the original κT=0.3, so landing near AC actually means something. (The flat-regime result was 2.84% mean over 5 seeds.) The −0.094% direct-opt residual is exactly the soft-terminal-penalty optimum, reproduced by an exact solver, which confirms the environment math. |
 | **Phase 2** &nbsp;·&nbsp; degrade one input (the **certainty-equivalence ceiling**) | RL (Gaussian policy, **5/5 seeds**) beats every static classical schedule by **2.1pp** and captures **~73%** of the CE-AC ceiling. It happens because time-varying σ makes AC's *fixed* schedule stale, and an exact classical ladder prices each rung on matched scenarios (paired 95% CIs; cost gaps vs naive AC): **naive AC 0 · smart-static −1.33% · RL −3.41% [−3.93, −2.89] · CE-AC −4.66%**. The conditioning is verified causally: the action is monotone in σ̂ on 26–30 of 30 (k, q) grid cells on every seed. |
 
 The arc stops at two phases by design. Staying in the linear-quadratic family, RL can at best tie
