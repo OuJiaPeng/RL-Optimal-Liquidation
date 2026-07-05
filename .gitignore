@@ -41,7 +41,7 @@ tensorboard/
 notebooks/
 .ipynb_checkpoints/
 
-# Archived exploratory chapters (kept local; not part of the shipped three-phase narrative)
+# Archived exploratory chapters + the working journal (kept local; not part of the shipped repo)
 archive/
 
 # IDE / OS

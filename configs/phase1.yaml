@@ -1,7 +1,7 @@
 # Phase 1 — reproduce Almgren-Chriss in the linear-impact regime.
 #
 # This is the validation config. PPO+Beta+1M should land within [0.8, 4.0]%
-# of AC across seeds. Result is documented in docs/phase1_journal.md.
+# of AC across seeds. Result is documented in docs/PROJECT_STATUS.md.
 #
 # YAML 1.1 quirk: scientific notation needs an explicit sign on the exponent
 # (1.0e+6 not 1.0e6). LiquidationParams.__post_init__ coerces strings to

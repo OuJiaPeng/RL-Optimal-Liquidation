@@ -1,7 +1,7 @@
 # RL Optimal Liquidation — Project Status
 
-**Single source of truth.** The README points here; `docs/phase1_journal.md` is the detail
-underneath.
+**Single source of truth** for the project's status, results, and the reasoning behind them.
+The README summarizes; this file is the complete account.
 
 ## Thesis
 
@@ -141,11 +141,6 @@ the CE-AC rung doubles as the per-realization value-of-conditioning oracle) · s
 sensitivity-probe grid (`scripts/probe_conditioning_grid.py`) · 5-seed protocol diagnosing
 **best AND final** · regression suite (15 tests) pinning the AC formulas, the exact solver,
 env-vs-analytic cost equivalence, and the κT-regime discrimination gap.
-
-## Reading order
-
-README → **this file** → `docs/phase1_journal.md` (the Phase 1 debugging chronology and the
-Phase 2 vol result).
 
 ## Reproduce
 
