@@ -55,3 +55,7 @@ Thumbs.db
 .claude/
 .cursor/
 .aider*
+
+# Local prep notes
+INTERVIEW_NOTES.md
+LOCAL_NOTES.md
